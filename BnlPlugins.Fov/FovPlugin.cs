@@ -2,8 +2,6 @@ using System;
 using System.IO;
 using System.Reflection;
 using BepInEx;
-using BepInEx.Configuration;
-using BepInEx.Logging;
 using HarmonyLib;
 using UnityEngine;
 
@@ -12,70 +10,129 @@ namespace BnlPlugins.Fov
     [BepInPlugin("bnl.community.fov", "BNL FOV Plugin", "1.0.0")]
     public class FovPlugin : BaseUnityPlugin
     {
-        internal static ManualLogSource Log = null!;
-
-        internal static ConfigEntry<bool> EnableFov = null!;
-        internal static ConfigEntry<float> FovValue = null!;
-        internal static ConfigEntry<float> WeaponModelFov = null!;
-        internal static ConfigEntry<float> AdsSensitivityMultiplier = null!;
+        internal static float FovValue = 120f;
+        internal static float WeaponModelFov = 30f;
+        internal static float AdsSensitivityMultiplier = 1.0f;
+        internal static bool Enabled = true;
 
         private void Awake()
         {
-            Log = base.Logger;
+            LoadConfig();
 
-            EnableFov = Config.Bind("FOV", "Enabled", true, "Enable custom FOV override.");
-            FovValue = Config.Bind("FOV", "Fov", 120f, new ConfigDescription("Camera field of view.", new AcceptableValueRange<float>(60f, 170f)));
-            WeaponModelFov = Config.Bind("FOV", "WeaponModelFov", 30f, new ConfigDescription("Weapon model camera FOV.", new AcceptableValueRange<float>(10f, 90f)));
-            AdsSensitivityMultiplier = Config.Bind("FOV", "AdsSensitivityMultiplier", 1.0f, new ConfigDescription("Mouse sensitivity multiplier while aiming down sights.", new AcceptableValueRange<float>(0.1f, 5f)));
+            try
+            {
+                var harmony = new Harmony("bnl.community.fov");
 
-            var harmony = new Harmony("bnl.community.fov");
-            harmony.PatchAll(typeof(CameraFovPatch));
-            harmony.PatchAll(typeof(CameraArmsPatch));
-            harmony.PatchAll(typeof(MouseLookPatch));
+                var camFovType = Type.GetType("CameraFov, Assembly-CSharp");
+                if (camFovType != null)
+                {
+                    var original = camFovType.GetMethod("Update", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    var postfix = typeof(Patches).GetMethod("CameraFovPostfix");
+                    if (original != null && postfix != null)
+                        harmony.Patch(original, null, new HarmonyMethod(postfix));
+                }
 
-            Log.LogInfo($"FOV plugin loaded. FOV={FovValue.Value}, WeaponModelFov={WeaponModelFov.Value}, AdsSensitivity={AdsSensitivityMultiplier.Value}");
+                var camArmsType = Type.GetType("CameraArms, Assembly-CSharp");
+                if (camArmsType != null)
+                {
+                    var original = camArmsType.GetMethod("Update", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    var postfix = typeof(Patches).GetMethod("CameraArmsPostfix");
+                    if (original != null && postfix != null)
+                        harmony.Patch(original, null, new HarmonyMethod(postfix));
+                }
+
+                // MouseLook::RotateByMouse is void in this Unity version —
+                // ADS sensitivity multiplier not available via postfix.
+                // var mouseLookType = Type.GetType("MouseLook, Assembly-CSharp");
+                // if (mouseLookType != null)
+                // {
+                //     var original = mouseLookType.GetMethod("RotateByMouse", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                //     var postfix = typeof(Patches).GetMethod("MouseLookPostfix");
+                //     if (original != null && postfix != null)
+                //         harmony.Patch(original, null, new HarmonyMethod(postfix));
+                // }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log(BepInEx.Logging.LogLevel.Error, "[BNL FOV] Harmony error: " + ex.Message);
+            }
+
+            Logger.Log(BepInEx.Logging.LogLevel.Info,
+                string.Format("[BNL FOV] Loaded. Enabled={0} FOV={1} WeaponFOV={2} AdsMult={3}",
+                    Enabled, FovValue, WeaponModelFov, AdsSensitivityMultiplier));
+        }
+
+        private void LoadConfig()
+        {
+            string cfgPath = Path.Combine(Path.Combine(Paths.GameRootPath, "BepInEx"), Path.Combine("config", "BnlPlugins.Fov.cfg"));
+
+            if (!File.Exists(cfgPath))
+            {
+                File.WriteAllText(cfgPath,
+                    "[FOV]\r\nenabled=true\r\nfov=120\r\nweapon_model_fov=30\r\nads_sensitivity_multiplier=1.0\r\n");
+                return;
+            }
+
+            foreach (string line in File.ReadAllLines(cfgPath))
+            {
+                string trimmed = line.Trim();
+                if (trimmed.StartsWith("#") || trimmed.StartsWith("[") || !trimmed.Contains("="))
+                    continue;
+
+                int eq = trimmed.IndexOf('=');
+                string key = trimmed.Substring(0, eq).Trim().ToLowerInvariant();
+                string val = trimmed.Substring(eq + 1).Trim();
+
+                float f;
+                switch (key)
+                {
+                    case "enabled":
+                        Enabled = val.ToLowerInvariant() != "false" && val != "0";
+                        break;
+                    case "fov":
+                        if (float.TryParse(val, System.Globalization.NumberStyles.Float,
+                                System.Globalization.CultureInfo.InvariantCulture, out f))
+                            FovValue = f;
+                        break;
+                    case "weapon_model_fov":
+                        if (float.TryParse(val, System.Globalization.NumberStyles.Float,
+                                System.Globalization.CultureInfo.InvariantCulture, out f))
+                            WeaponModelFov = f;
+                        break;
+                    case "ads_sensitivity_multiplier":
+                        if (float.TryParse(val, System.Globalization.NumberStyles.Float,
+                                System.Globalization.CultureInfo.InvariantCulture, out f))
+                            AdsSensitivityMultiplier = f;
+                        break;
+                }
+            }
         }
     }
 
-    // Postfix CameraFov.Update — runs after the game sets cam.fieldOfView, then overrides it.
-    [HarmonyPatch(typeof(CameraFov), "Update")]
-    static class CameraFovPatch
+    public static class Patches
     {
-        static void Postfix(CameraFov __instance)
+        public static void CameraFovPostfix(Component __instance)
         {
-            if (!FovPlugin.EnableFov.Value) return;
+            if (!FovPlugin.Enabled) return;
             Camera cam = __instance.GetComponent<Camera>();
             if (cam != null)
-                cam.fieldOfView = FovPlugin.FovValue.Value;
+                cam.fieldOfView = FovPlugin.FovValue;
         }
-    }
 
-    // Postfix CameraArms.Update — overrides the weapon model camera FOV.
-    [HarmonyPatch(typeof(CameraArms), "Update")]
-    static class CameraArmsPatch
-    {
-        static void Postfix(CameraArms __instance)
+        public static void CameraArmsPostfix(Component __instance)
         {
-            if (!FovPlugin.EnableFov.Value) return;
+            if (!FovPlugin.Enabled) return;
             Camera cam = __instance.GetComponent<Camera>();
             if (cam != null && cam.enabled)
-                cam.fieldOfView = FovPlugin.WeaponModelFov.Value;
+                cam.fieldOfView = FovPlugin.WeaponModelFov;
         }
-    }
 
-    // Postfix MouseLook.RotateByMouse — scales the returned sensitivity when ADS.
-    // The method signature: float RotateByMouse(float currentScale)
-    [HarmonyPatch(typeof(MouseLook), "RotateByMouse")]
-    static class MouseLookPatch
-    {
-        static void Postfix(MouseLook __instance, ref float __result)
+        public static void MouseLookPostfix(Component __instance, ref float __result)
         {
-            if (!FovPlugin.EnableFov.Value) return;
-            if (Math.Abs(FovPlugin.AdsSensitivityMultiplier.Value - 1f) < 0.001f) return;
-
-            Unit? unit = __instance.GetComponent<Unit>();
-            if (unit != null && unit.GetAimingState() != null)
-                __result *= FovPlugin.AdsSensitivityMultiplier.Value;
+            if (!FovPlugin.Enabled) return;
+            if (Math.Abs(FovPlugin.AdsSensitivityMultiplier - 1f) < 0.001f) return;
+            if (__instance.GetComponent("Unit") != null)
+                __result *= FovPlugin.AdsSensitivityMultiplier;
         }
     }
 }

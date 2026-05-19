@@ -2,8 +2,8 @@
 
   <PropertyGroup>
     <TargetFramework>net35</TargetFramework>
-    <AssemblyName>BnlPlugins.Fov</AssemblyName>
-    <RootNamespace>BnlPlugins.Fov</RootNamespace>
+    <AssemblyName>BnlPlugins.Launcher</AssemblyName>
+    <RootNamespace>BnlPlugins.Launcher</RootNamespace>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>None</ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>
@@ -25,9 +25,6 @@
 
   <Target Name="AddGameRefsAfterResolve" AfterTargets="ResolveAssemblyReferences">
     <ItemGroup>
-      <ReferencePath Include="$(GameManagedDir)\Assembly-CSharp.dll">
-        <Private>false</Private>
-      </ReferencePath>
       <ReferencePath Include="$(UnityManagedDir)\UnityEngine.dll">
         <Private>false</Private>
       </ReferencePath>
