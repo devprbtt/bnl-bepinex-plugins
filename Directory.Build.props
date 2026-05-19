@@ -1,0 +1,13 @@
+<Project>
+  <!--
+    Paths to the game assemblies used during compilation.
+    Override these in a local Directory.Build.props.user (gitignored) if your
+    layout differs, e.g. a real Steam install of Block N Load.
+  -->
+  <PropertyGroup>
+    <!-- Folder containing Assembly-CSharp.dll -->
+    <GameManagedDir Condition="'$(GameManagedDir)' == ''">K:\BNL EXPORTED\patched-managed</GameManagedDir>
+    <!-- Folder containing UnityEngine.dll (may differ from GameManagedDir in dev layouts) -->
+    <UnityManagedDir Condition="'$(UnityManagedDir)' == ''">K:\BNL EXPORTED\_tmp_local_build_preview_test\Win64\BlockNLoad_Data\Managed</UnityManagedDir>
+  </PropertyGroup>
+</Project>
