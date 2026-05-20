@@ -62,6 +62,13 @@ Copy-Item "$workspace\bepinex-dist\BepInEx\config\BepInEx.cfg" (Join-Path $stagi
 # Copy built plugin DLL
 Copy-Item "$workspace\BnlPlugins.Launcher\bin\Release\net35\BnlPlugins.Launcher.dll" (Join-Path $staging "Win64\BepInEx\plugins")
 
+# Copy Configuration Manager (in-game settings menu, F1)
+$cfgManDir = "$workspace\bepinex-dist\BepInEx\plugins\ConfigurationManager"
+if (Test-Path $cfgManDir) {
+    Copy-Item $cfgManDir (Join-Path $staging "Win64\BepInEx\plugins\ConfigurationManager") -Recurse
+    Write-Host "  Included Configuration Manager"
+}
+
 # Copy card override images — pull from game folder (source of truth) first,
 # then fill in any missing from workspace dist
 $cardStaging = Join-Path $staging "Win64\BepInEx\plugins\Launcher\CardTextures"

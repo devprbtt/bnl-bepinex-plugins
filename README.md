@@ -57,6 +57,17 @@ host=v310.blocknload.pauldh.nl
 port=28100
 ```
 
+You can also change these settings in-game: press **F1** to open the Configuration Manager.
+
+## Configuration Manager
+
+Press **F1** in-game to open a settings menu where you can change plugin settings without editing config files:
+
+- Server host and port
+- Any future configurable options
+
+This is powered by [BepInEx.ConfigurationManager](https://github.com/BepInEx/BepInEx.ConfigurationManager) — included automatically.
+
 ## Uninstalling
 
 Delete the `winhttp.dll` file from `BlockNLoad\Win64\`. That's it — the game goes back to vanilla.
