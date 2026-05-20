@@ -422,6 +422,8 @@ namespace BnlPlugins.Launcher
 
             string latestVersion = null;
             string releaseUrl = null;
+            string releaseName = null;
+            string releaseBody = null;
 
             try
             {
@@ -434,6 +436,8 @@ namespace BnlPlugins.Launcher
                     // Simple JSON parsing without Newtonsoft (not available in .NET 3.5)
                     latestVersion = ExtractJsonString(json, "tag_name");
                     releaseUrl = ExtractJsonString(json, "html_url");
+                    releaseName = ExtractJsonString(json, "name");
+                    releaseBody = ExtractJsonBody(json);
 
                     // Strip 'v' prefix from tag if present
                     if (latestVersion != null && latestVersion.StartsWith("v", StringComparison.OrdinalIgnoreCase))
@@ -457,7 +461,7 @@ namespace BnlPlugins.Launcher
             {
                 Logger.Log(BepInEx.Logging.LogLevel.Info,
                     "[BNL Launcher] New version available: v" + latestVersion);
-                ShowUpdateNotification(latestVersion, releaseUrl);
+                ShowUpdateNotification(latestVersion, releaseUrl, releaseName, releaseBody);
             }
         }
 
@@ -479,7 +483,76 @@ namespace BnlPlugins.Launcher
             if (end < 0)
                 return null;
 
-            return json.Substring(start, end - start);
+            return UnescapeJson(json.Substring(start, end - start));
+        }
+
+        // Extract the "body" field which may contain escaped characters and newlines
+        private static string ExtractJsonBody(string json)
+        {
+            string search = "\"body\":\"";
+            int start = json.IndexOf(search, StringComparison.Ordinal);
+            if (start < 0)
+            {
+                search = "\"body\": \"";
+                start = json.IndexOf(search, StringComparison.Ordinal);
+            }
+            if (start < 0)
+                return null;
+
+            start += search.Length;
+
+            // Scan forward handling escape sequences to find the real end
+            var sb = new System.Text.StringBuilder();
+            for (int i = start; i < json.Length; i++)
+            {
+                char c = json[i];
+                if (c == '\\' && i + 1 < json.Length)
+                {
+                    char next = json[i + 1];
+                    if (next == 'n') { sb.Append('\n'); i++; }
+                    else if (next == 'r') { sb.Append('\r'); i++; }
+                    else if (next == 't') { sb.Append('\t'); i++; }
+                    else if (next == '"') { sb.Append('"'); i++; }
+                    else if (next == '\\') { sb.Append('\\'); i++; }
+                    else { sb.Append(c); }
+                }
+                else if (c == '"')
+                {
+                    break; // End of string
+                }
+                else
+                {
+                    sb.Append(c);
+                }
+            }
+
+            return sb.ToString();
+        }
+
+        private static string UnescapeJson(string str)
+        {
+            if (str.IndexOf('\\') < 0)
+                return str;
+
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < str.Length; i++)
+            {
+                if (str[i] == '\\' && i + 1 < str.Length)
+                {
+                    char next = str[i + 1];
+                    if (next == 'n') { sb.Append('\n'); i++; }
+                    else if (next == 'r') { sb.Append('\r'); i++; }
+                    else if (next == 't') { sb.Append('\t'); i++; }
+                    else if (next == '"') { sb.Append('"'); i++; }
+                    else if (next == '\\') { sb.Append('\\'); i++; }
+                    else { sb.Append(str[i]); }
+                }
+                else
+                {
+                    sb.Append(str[i]);
+                }
+            }
+            return sb.ToString();
         }
 
         private static bool IsNewerVersion(string latest, string current)
@@ -507,12 +580,11 @@ namespace BnlPlugins.Launcher
             }
         }
 
-        private void ShowUpdateNotification(string newVersion, string releaseUrl)
+        private void ShowUpdateNotification(string newVersion, string releaseUrl, string releaseName, string releaseBody)
         {
-            // Create a persistent GameObject for the notification UI
             var go = new GameObject("BNL_UpdateNotifier");
             DontDestroyOnLoad(go);
-            go.AddComponent<UpdateNotifier>().Initialize(newVersion, releaseUrl, CurrentVersion);
+            go.AddComponent<UpdateNotifier>().Initialize(newVersion, releaseUrl, CurrentVersion, releaseName, releaseBody);
         }
     }
 
@@ -524,15 +596,21 @@ namespace BnlPlugins.Launcher
         private string _newVersion = "";
         private string _releaseUrl = "";
         private string _currentVersion = "";
+        private string _releaseName = "";
+        private string _releaseBody = "";
         private bool _visible = true;
         private Rect _windowRect;
+        private Vector2 _scrollPos;
 
-        public void Initialize(string newVersion, string releaseUrl, string currentVersion)
+        public void Initialize(string newVersion, string releaseUrl, string currentVersion,
+            string releaseName, string releaseBody)
         {
             _newVersion = newVersion;
             _releaseUrl = releaseUrl;
             _currentVersion = currentVersion;
-            _windowRect = new Rect(Screen.width / 2f - 200f, Screen.height / 2f - 90f, 400f, 180f);
+            _releaseName = releaseName ?? "";
+            _releaseBody = releaseBody ?? "";
+            _windowRect = new Rect(Screen.width / 2f - 230f, Screen.height / 2f - 170f, 460f, 340f);
         }
 
         private void OnGUI()
@@ -540,33 +618,80 @@ namespace BnlPlugins.Launcher
             if (!_visible)
                 return;
 
-            GUI.skin = null; // Use default Unity skin
-            _windowRect = GUI.Window(GetInstanceID(), _windowRect, DrawWindow, "BNL Community Launcher - Update Available");
+            _windowRect = GUI.Window(GetInstanceID(), _windowRect, DrawWindow,
+                "BNL Launcher - Update v" + _newVersion + " Available");
         }
 
         private void DrawWindow(int windowId)
         {
-            GUILayout.BeginVertical();
-            GUILayout.Space(10);
+            _scrollPos = GUILayout.BeginScrollView(_scrollPos, GUILayout.Height(260));
 
-            GUILayout.Label("A new version of the BNL Community Launcher is available!", 
-                GUI.skin.customStyles.Length > 0 ? GUI.skin.customStyles[0] : GUI.skin.label);
+            GUILayout.Label("A new version is available!", new GUIStyle(GUI.skin.label)
+            {
+                fontStyle = FontStyle.Bold,
+                fontSize = 12,
+                normal = { textColor = Color.yellow }
+            });
+
+            GUILayout.Space(6);
+
+            GUILayout.Label("Installed: v" + _currentVersion + "  ->  Latest: v" + _newVersion);
+
+            if (!string.IsNullOrEmpty(_releaseName) &&
+                !_releaseName.Equals("v" + _newVersion, StringComparison.OrdinalIgnoreCase) &&
+                !_releaseName.Equals(_newVersion, StringComparison.OrdinalIgnoreCase))
+            {
+                GUILayout.Space(4);
+                GUILayout.Label(_releaseName, new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold });
+            }
+
+            if (!string.IsNullOrEmpty(_releaseBody))
+            {
+                GUILayout.Space(8);
+
+                // Show body lines as separate labels (IMGUI doesn't do rich text well)
+                string[] lines = _releaseBody.Split('\n');
+                int shown = 0;
+                foreach (string line in lines)
+                {
+                    string trimmed = line.Trim();
+                    if (trimmed.Length == 0 && shown == 0)
+                        continue;
+                    if (shown >= 25)
+                        break;
+
+                    GUIStyle style = GUI.skin.label;
+                    if (trimmed.StartsWith("## "))
+                    {
+                        trimmed = trimmed.Substring(3);
+                        style = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold };
+                    }
+                    else if (trimmed.StartsWith("# "))
+                    {
+                        trimmed = trimmed.Substring(2);
+                        style = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold, fontSize = 11 };
+                    }
+                    else if (trimmed.StartsWith("- "))
+                    {
+                        trimmed = "  " + trimmed;
+                    }
+
+                    GUILayout.Label(trimmed.Length > 0 ? trimmed : " ", style);
+                    shown++;
+                }
+
+                if (shown >= 25)
+                    GUILayout.Label("... (see release page for full details)");
+            }
+
+            GUILayout.EndScrollView();
 
             GUILayout.Space(8);
-
-            GUILayout.Label("Installed: v" + _currentVersion);
-            GUILayout.Label("Latest:    v" + _newVersion);
-
-            GUILayout.Space(12);
-
-            GUILayout.Label("New plugins or features may be available.");
-
-            GUILayout.Space(16);
 
             GUILayout.BeginHorizontal();
             GUILayout.FlexibleSpace();
 
-            if (GUILayout.Button("Download Update", GUILayout.Width(140), GUILayout.Height(30)))
+            if (GUILayout.Button("Download v" + _newVersion, GUILayout.Width(160), GUILayout.Height(32)))
             {
                 if (!string.IsNullOrEmpty(_releaseUrl))
                     Application.OpenURL(_releaseUrl);
@@ -574,9 +699,9 @@ namespace BnlPlugins.Launcher
                 Destroy(gameObject);
             }
 
-            GUILayout.Space(10);
+            GUILayout.Space(12);
 
-            if (GUILayout.Button("Remind Me Later", GUILayout.Width(140), GUILayout.Height(30)))
+            if (GUILayout.Button("Remind Me Later", GUILayout.Width(140), GUILayout.Height(32)))
             {
                 _visible = false;
                 Destroy(gameObject);
@@ -585,7 +710,8 @@ namespace BnlPlugins.Launcher
             GUILayout.FlexibleSpace();
             GUILayout.EndHorizontal();
 
-            GUILayout.EndVertical();
+            GUILayout.Space(6);
+
             GUI.DragWindow(new Rect(0, 0, 10000, 20));
         }
     }
