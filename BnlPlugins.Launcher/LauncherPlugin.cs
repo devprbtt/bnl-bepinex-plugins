@@ -241,7 +241,7 @@ namespace BnlPlugins.Launcher
                         harmony.Patch(initServerMethod,
                             postfix: new HarmonyMethod(typeof(LauncherParityPatches).GetMethod("SteamInit_Postfix")));
                         Logger.Log(BepInEx.Logging.LogLevel.Info,
-                            "[BNL Launcher] Patched: SteamLogin.Init → selected server override");
+                            "[BNL Launcher] Patched: SteamLogin.Init → server override");
                     }
                     else
                     {
@@ -251,6 +251,25 @@ namespace BnlPlugins.Launcher
                 }
 
                 var playerDataType = Type.GetType("PlayerData, Assembly-CSharp");
+
+                // Bulletproof: patch MasterServer getter on PlayerData to always return community server
+                if (playerDataType != null)
+                {
+                    var masterServerGetter = FindInstanceMethod(playerDataType, "get_MasterServer", 0);
+                    if (masterServerGetter != null)
+                    {
+                        harmony.Patch(masterServerGetter,
+                            postfix: new HarmonyMethod(typeof(LauncherParityPatches).GetMethod("MasterServer_Getter_Postfix")));
+                        Logger.Log(BepInEx.Logging.LogLevel.Info,
+                            "[BNL Launcher] Patched: PlayerData.get_MasterServer → community server override");
+                    }
+                    else
+                    {
+                        Logger.Log(BepInEx.Logging.LogLevel.Warning,
+                            "[BNL Launcher] Could not find PlayerData.get_MasterServer");
+                    }
+                }
+
                 if (playerDataType != null)
                 {
                     var isNoobGetter = FindInstanceMethod(playerDataType, "get_IsNoob", 0);
@@ -1064,22 +1083,82 @@ namespace BnlPlugins.Launcher
 
     public static class LauncherParityPatches
     {
+        private static object? _cachedCommunityServer;
+
         public static void SteamInit_Postfix()
         {
+            // Try to set via SteamLogin.Init postfix as a secondary mechanism
             try
             {
                 object playerData = GetSingletonInstance("PlayerData");
-                if (playerData == null)
-                    return;
-
-                // Always use direct override — servers.txt binary patch no longer exists.
-                // The server selector returns official servers, so we bypass it entirely.
-                SetMasterServerDirect(playerData);
+                if (playerData != null)
+                    SetMasterServerDirect(playerData);
             }
             catch (Exception ex)
             {
-                LauncherPlugin.Log.LogError("[BNL Launcher] Failed to override MasterServer: " + ex.Message);
+                LauncherPlugin.Log.LogError("[BNL Launcher] SteamInit override failed: " + ex.Message);
             }
+        }
+
+        /// <summary>
+        /// Bulletproof: intercepts every read of PlayerData.MasterServer and returns
+        /// the community server if the official one is detected.
+        /// </summary>
+        public static void MasterServer_Getter_Postfix(ref object __result)
+        {
+            if (__result == null)
+                return;
+
+            // If already cached our community server, reuse it
+            if (_cachedCommunityServer != null)
+            {
+                __result = _cachedCommunityServer;
+                return;
+            }
+
+            try
+            {
+                Type msType = __result.GetType();
+                FieldInfo hostField = msType.GetField("Host",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                PropertyInfo hostProp = hostField == null ? msType.GetProperty("Host",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic) : null;
+
+                string? currentHost = null;
+                if (hostField != null)
+                    currentHost = hostField.GetValue(__result) as string;
+                else if (hostProp != null)
+                    currentHost = hostProp.GetValue(__result, null) as string;
+
+                // If already pointing to our community server, cache and return
+                if (currentHost == LauncherPlugin.DefaultServerHost)
+                {
+                    _cachedCommunityServer = __result;
+                    return;
+                }
+
+                // Override: clone the object and set our host/port
+                object clone = Activator.CreateInstance(msType);
+
+                if (hostField != null)
+                    hostField.SetValue(clone, LauncherPlugin.DefaultServerHost);
+                else if (hostProp != null)
+                    hostProp.SetValue(clone, LauncherPlugin.DefaultServerHost, null);
+
+                FieldInfo portField = msType.GetField("Port",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                PropertyInfo portProp = portField == null ? msType.GetProperty("Port",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic) : null;
+
+                if (portField != null)
+                    portField.SetValue(clone, LauncherPlugin.DefaultServerPort);
+                else if (portProp != null)
+                    portProp.SetValue(clone, LauncherPlugin.DefaultServerPort, null);
+
+                _cachedCommunityServer = clone;
+                __result = clone;
+            }
+            catch { }
         }
 
         private static void SetMasterServerDirect(object playerData)
