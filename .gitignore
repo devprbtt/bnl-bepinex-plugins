@@ -3,3 +3,7 @@ obj/
 *.user
 Directory.Build.props.user
 .vs/
+tmp_*
+tools/
+bepinex-dist/BepInEx/plugins/
+BnlPlugins.Longshot/

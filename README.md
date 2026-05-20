@@ -1,6 +1,6 @@
 # BNL BepInEx Plugins
 
-BepInEx 5 plugins and preloader patcher for Block N Load (Unity 5.1.4). Replaces the old IL-patcher launcher approach with proper BepInEx 5 modding.
+BepInEx 5 plugins for Block N Load (Unity 5.1.4). Replaces the old IL-patcher launcher approach with runtime BepInEx/Harmony mods.
 
 > **Status**: Working — connects to community servers, EAC bypassed, FOV mod active.
 
@@ -8,18 +8,17 @@ BepInEx 5 plugins and preloader patcher for Block N Load (Unity 5.1.4). Replaces
 
 | Component | Layer | Description |
 |-----------|-------|-------------|
-| `BnlPlugins.Patcher` | Preloader patcher | In-memory binary patches: EAC init NOP, servers.txt support, new player skip |
-| `BnlPlugins.Launcher` | Plugin | Harmony: `IsEACRuntime→true`, writes `servers.txt` |
+| `BnlPlugins.Launcher` | Plugin | Harmony launcher parity patches, `servers.txt`, runtime shop image overrides |
 | `BnlPlugins.Fov` | Plugin | Camera FOV, weapon model FOV |
+| `BnlPlugins.Longshot` | Plugin | Runtime Longshot asset override work |
 
 ## How it works
 
-All patches run in memory — **no game files are modified on disk**, so Steam never triggers file verification. You can launch through Steam's Play button or directly.
+All patches run at runtime through BepInEx/Harmony — **no game files or game assemblies are modified on disk**, so Steam never triggers file verification. You can launch through Steam's Play button or directly.
 
 ```
-Launch → BepInEx preloader → Patcher swaps Assembly-CSharp in memory (patched)
-       → Unity loads patched assembly
-       → Plugins load (Harmony EAC bypass + FOV)
+Launch → BepInEx preloader
+       → Plugins load (Harmony launcher patches + image overrides + FOV)
        → Game connects to community server
 ```
 
@@ -45,6 +44,7 @@ Set `GameDir` to your Block N Load install by creating `Directory.Build.props.us
 Then build:
 
 ```
+dotnet build BnlPlugins.Launcher
 dotnet build BnlPlugins.Fov
 ```
 
@@ -68,18 +68,17 @@ BlockNLoad\
     │   └── Mono.Cecil.dll
     ├── config\
     │   └── BepInEx.cfg      ← Pre-configured for Unity 5
-    ├── plugins\              ← Put BnlPlugins.Fov.dll here
-    └── patchers\
+    └── plugins\              ← Put BnlPlugins.Launcher.dll / BnlPlugins.Fov.dll here
 ```
 
-After copying, place the built `BnlPlugins.Fov.dll` into `BepInEx/plugins/`.
+After copying, place the built plugin DLLs into `BepInEx/plugins/`.
 
 ### Manual Setup
 
 1. Download [BepInEx 5.4.23 win_x64](https://github.com/BepInEx/BepInEx/releases/tag/v5.4.23.2)
 2. Extract into your Block N Load game folder (next to `BlockNLoad.exe`)
 3. Replace `BepInEx/config/BepInEx.cfg` with the one from `bepinex-dist/BepInEx/config/BepInEx.cfg` in this repo (it has the Unity 5 fixes pre-applied)
-4. Copy the built `BnlPlugins.Fov.dll` into `BepInEx/plugins/`
+4. Copy the built plugin DLLs into `BepInEx/plugins/`
 
 ## Unity 5 & Older Troubleshooting
 
@@ -142,14 +141,16 @@ After running the game with BepInEx installed, check for:
 
 - **Console window** appearing alongside the game (shows BepInEx loading)
 - **`BepInEx/LogOutput.log`** — should show plugin loading messages
-- **`BepInEx/config/bnl.community.fov.cfg`** — auto-generated config file
+- **`BepInEx/config/BnlPlugins.Launcher.cfg`** — launcher config file
+- **`BepInEx/config/bnl.community.fov.cfg`** — FOV config file
 
 ## Configuration
 
-After the first run with the plugin loaded, a config file is generated at:
+After the first run with the plugins loaded, config files are generated at:
 
 ```
+BepInEx/config/BnlPlugins.Launcher.cfg
 BepInEx/config/bnl.community.fov.cfg
 ```
 
-Edit it to change FOV, weapon model FOV, and ADS sensitivity:
+Edit them to change server settings, FOV, weapon model FOV, and ADS sensitivity.
