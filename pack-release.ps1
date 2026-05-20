@@ -35,6 +35,10 @@ Write-Host "=== Building plugins ==="
 dotnet build "$workspace\BnlPlugins.Launcher\BnlPlugins.Launcher.csproj" -c Release
 if ($LASTEXITCODE -ne 0) { throw "Launcher build failed" }
 
+# Build installer exe
+dotnet build "$workspace\BnlInstaller\BnlInstaller.csproj" -c Release
+if ($LASTEXITCODE -ne 0) { throw "Installer build failed" }
+
 Write-Host "=== Preparing release package ==="
 
 $staging = Join-Path $OutputDir "staging"
@@ -97,16 +101,16 @@ Compress-Archive -Path (Join-Path $staging "Win64") -DestinationPath $zipPath
 # Cleanup staging
 Remove-Item $staging -Recurse -Force
 
-# Copy installer script to release folder
-Copy-Item "$workspace\install.ps1" $OutputDir -Force
+# Copy installer exe to release folder
+Copy-Item "$workspace\BnlInstaller\bin\Release\net472\BNL-Installer.exe" $OutputDir -Force
 
 $zipSize = [math]::Round((Get-Item $zipPath).Length / 1MB, 2)
 Write-Host "=== Done: $zipPath ($zipSize MB) ==="
 Write-Host ""
 Write-Host "Release assets ready in: $OutputDir"
 Write-Host "  $zipName"
-Write-Host "  install.ps1"
+Write-Host "  BNL-Installer.exe"
 Write-Host ""
 Write-Host "Upload both to GitHub Releases. Users can either:"
-Write-Host "  1. Run install.ps1 (auto-detect + GUI)"
+Write-Host "  1. Run BNL-Installer.exe (auto-detect + GUI, no dependencies)"
 Write-Host "  2. Extract the zip manually"

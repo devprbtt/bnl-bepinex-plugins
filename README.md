@@ -8,8 +8,8 @@ One-click mod for Block N Load that connects you to the community server — no 
 
 ### Option 1: Automatic Installer (Recommended)
 
-1. **Download** [`install.ps1`](https://github.com/devprbtt/bnl-bepinex-plugins/releases/latest/download/install.ps1) from the latest release
-2. **Right-click** the file → **Run with PowerShell**
+1. **Download** `BNL-Installer.exe` from the [latest release](https://github.com/devprbtt/bnl-bepinex-plugins/releases/latest)
+2. **Double-click** to run — no dependencies, works on any Windows 10/11 PC
 3. The installer auto-detects your Block N Load folder, lets you pick components, and installs everything
 
 ### Option 2: Manual Install
