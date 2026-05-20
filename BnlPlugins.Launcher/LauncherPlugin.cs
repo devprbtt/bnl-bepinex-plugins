@@ -1044,39 +1044,114 @@ namespace BnlPlugins.Launcher
         {
             try
             {
-                object loginLogic = GetSingletonInstance("LoginLogic");
                 object playerData = GetSingletonInstance("PlayerData");
-                if (loginLogic == null || playerData == null)
+                if (playerData == null)
                     return;
 
-                FieldInfo selectorField = loginLogic.GetType().GetField("ServerSelector",
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                FieldInfo masterServerField = playerData.GetType().GetField("MasterServer",
+                // Try to get the server from servers.txt (player-selected community server)
+                object loginLogic = GetSingletonInstance("LoginLogic");
+                FieldInfo selectorField = loginLogic?.GetType().GetField("ServerSelector",
                     BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
                 Type helperType = Type.GetType("ServerSelector.ServerSelectorHelper, Assembly-CSharp");
-                if (selectorField == null || masterServerField == null || helperType == null)
-                    return;
 
-                object selector = selectorField.GetValue(loginLogic);
-                if (selector == null)
-                    return;
+                object selectedServer = null;
+                if (selectorField != null && helperType != null)
+                {
+                    object selector = selectorField.GetValue(loginLogic);
+                    if (selector != null)
+                    {
+                        MethodInfo getSelectedServer = helperType.GetMethod("GetSelectedServer",
+                            BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                        if (getSelectedServer != null)
+                            selectedServer = getSelectedServer.Invoke(null, new[] { selector });
+                    }
+                }
 
-                MethodInfo getSelectedServer = helperType.GetMethod("GetSelectedServer",
-                    BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-                if (getSelectedServer == null)
-                    return;
+                if (selectedServer != null)
+                {
+                    // Use the server from servers.txt
+                    FieldInfo masterServerField = playerData.GetType().GetField("MasterServer",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (masterServerField != null)
+                    {
+                        masterServerField.SetValue(playerData, selectedServer);
+                        LauncherPlugin.Log.LogInfo("[BNL Launcher] Overrode MasterServer from server selector");
+                        return;
+                    }
+                }
 
-                object selectedServer = getSelectedServer.Invoke(null, new[] { selector });
-                if (selectedServer == null)
-                    return;
-
-                masterServerField.SetValue(playerData, selectedServer);
-                LauncherPlugin.Log.LogInfo("[BNL Launcher] Overrode PlayerData.MasterServer from server selector");
+                // Fallback: set community server directly (bypasses servers.txt)
+                SetMasterServerDirect(playerData);
             }
             catch (Exception ex)
             {
                 LauncherPlugin.Log.LogError("[BNL Launcher] Failed to override MasterServer: " + ex.Message);
+                // Last resort: direct override
+                try
+                {
+                    object playerData = GetSingletonInstance("PlayerData");
+                    if (playerData != null) SetMasterServerDirect(playerData);
+                }
+                catch { }
             }
+        }
+
+        private static void SetMasterServerDirect(object playerData)
+        {
+            Type masterServerType = Type.GetType("MasterServer, Assembly-CSharp") ??
+                                    Type.GetType("MasterServerInfo, Assembly-CSharp");
+            if (masterServerType == null)
+            {
+                LauncherPlugin.Log.LogWarning("[BNL Launcher] Could not find MasterServer type");
+                return;
+            }
+
+            FieldInfo msField = playerData.GetType().GetField("MasterServer",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (msField == null) return;
+
+            // Try to create a new MasterServer instance
+            object msInstance = msField.GetValue(playerData);
+            if (msInstance == null)
+            {
+                try { msInstance = Activator.CreateInstance(masterServerType); }
+                catch { return; }
+            }
+
+            // Set Host and Port via reflection
+            var hostField = masterServerType.GetField("Host",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            var portField = masterServerType.GetField("Port",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+            // Also try property setters if fields don't exist
+            if (hostField == null)
+            {
+                var hostProp = masterServerType.GetProperty("Host",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (hostProp != null)
+                    hostProp.SetValue(msInstance, LauncherPlugin.DefaultServerHost, null);
+            }
+            else
+            {
+                hostField.SetValue(msInstance, LauncherPlugin.DefaultServerHost);
+            }
+
+            if (portField == null)
+            {
+                var portProp = masterServerType.GetProperty("Port",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (portProp != null)
+                    portProp.SetValue(msInstance, LauncherPlugin.DefaultServerPort, null);
+            }
+            else
+            {
+                portField.SetValue(msInstance, LauncherPlugin.DefaultServerPort);
+            }
+
+            msField.SetValue(playerData, msInstance);
+            LauncherPlugin.Log.LogInfo("[BNL Launcher] Directly set MasterServer to " +
+                LauncherPlugin.DefaultServerHost + ":" + LauncherPlugin.DefaultServerPort);
         }
 
         public static void PlayerDataIsNoob_Postfix(ref bool __result)
