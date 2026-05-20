@@ -6,6 +6,14 @@ One-click mod for Block N Load that connects you to the community server — no 
 
 ## Installation
 
+### Option 1: Automatic Installer (Recommended)
+
+1. **Download** [`install.ps1`](https://github.com/devprbtt/bnl-bepinex-plugins/releases/latest/download/install.ps1) from the latest release
+2. **Right-click** the file → **Run with PowerShell**
+3. The installer auto-detects your Block N Load folder, lets you pick components, and installs everything
+
+### Option 2: Manual Install
+
 1. **Download** `bnl-bepinex-plugins-vX.X.X.zip` from [Releases](https://github.com/devprbtt/bnl-bepinex-plugins/releases)
 2. **Extract** the zip into your Block N Load game folder:
    ```
