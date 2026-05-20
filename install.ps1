@@ -1,4 +1,4 @@
-# BNL Community Launcher — Installer
+# BNL Community Launcher - Installer
 # Automatically detects your Block N Load folder and installs the mod.
 # Run this script (right-click → Run with PowerShell).
 param(
@@ -63,7 +63,7 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "BNL Community Launcher — Installer"
+$form.Text = "BNL Community Launcher - Installer"
 $form.Size = New-Object System.Drawing.Size(520, 480)
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = "FixedDialog"
@@ -80,7 +80,7 @@ $titleLabel.Location = New-Object System.Drawing.Point(15, 15)
 
 # Description
 $descLabel = New-Object System.Windows.Forms.Label
-$descLabel.Text = "Installs BepInEx + community launcher plugin.`nNo game files are modified — safe for Steam."
+$descLabel.Text = "Installs BepInEx + community launcher plugin.`nNo game files are modified - safe for Steam."
 $descLabel.Size = New-Object System.Drawing.Size(480, 35)
 $descLabel.Location = New-Object System.Drawing.Point(15, 50)
 
@@ -111,7 +111,7 @@ $groupPlugins.Location = New-Object System.Drawing.Point(15, 160)
 
 # Mandatory: Card Textures
 $chkCardTextures = New-Object System.Windows.Forms.CheckBox
-$chkCardTextures.Text = "Card Textures (custom perk images) — REQUIRED"
+$chkCardTextures.Text = "Card Textures (custom perk images) - REQUIRED"
 $chkCardTextures.Checked = $true
 $chkCardTextures.Enabled = $false
 $chkCardTextures.Size = New-Object System.Drawing.Size(460, 20)
@@ -119,7 +119,7 @@ $chkCardTextures.Location = New-Object System.Drawing.Point(10, 22)
 
 # Mandatory: BepInEx core
 $chkBepInEx = New-Object System.Windows.Forms.CheckBox
-$chkBepInEx.Text = "BepInEx (mod loader) — REQUIRED"
+$chkBepInEx.Text = "BepInEx (mod loader) - REQUIRED"
 $chkBepInEx.Checked = $true
 $chkBepInEx.Enabled = $false
 $chkBepInEx.Size = New-Object System.Drawing.Size(460, 20)
