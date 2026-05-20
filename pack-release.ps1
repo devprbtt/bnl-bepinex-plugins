@@ -69,6 +69,10 @@ if (Test-Path $cfgManDir) {
     Write-Host "  Included Configuration Manager"
 }
 
+# Write version file (used by auto-update check)
+$Version | Out-File -FilePath (Join-Path $staging "Win64\BepInEx\plugins\Launcher\version.txt") -Encoding ascii -NoNewline
+Write-Host "  Version: $Version"
+
 # Copy card override images — pull from game folder (source of truth) first,
 # then fill in any missing from workspace dist
 $cardStaging = Join-Path $staging "Win64\BepInEx\plugins\Launcher\CardTextures"

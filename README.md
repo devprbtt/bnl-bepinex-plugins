@@ -68,6 +68,23 @@ Press **F1** in-game to open a settings menu where you can change plugin setting
 
 This is powered by [BepInEx.ConfigurationManager](https://github.com/BepInEx/BepInEx.ConfigurationManager) — included automatically.
 
+## Auto-Updates
+
+The launcher checks for new versions automatically when you start the game. If a newer version is available, a popup will appear:
+
+```
+┌─ BNL Community Launcher - Update Available ─┐
+│                                               │
+│  A new version is available!                  │
+│  Installed: v1.2.0                            │
+│  Latest:    v1.3.0                            │
+│                                               │
+│  [Download Update]    [Remind Me Later]       │
+└───────────────────────────────────────────────┘
+```
+
+Clicking **Download Update** opens the GitHub releases page where you can download the latest `install.ps1` or zip file.
+
 ## Uninstalling
 
 Delete the `winhttp.dll` file from `BlockNLoad\Win64\`. That's it — the game goes back to vanilla.

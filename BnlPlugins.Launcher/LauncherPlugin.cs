@@ -21,17 +21,23 @@ namespace BnlPlugins.Launcher
     ///   - EACToolInitializer.Initialize()/KickPlayer()/leave hooks → disabled
     ///   - Writes servers.txt for community server selection
     /// </summary>
-    [BepInPlugin("bnl.community.launcher", "BNL Launcher Patches", "1.1.0")]
+    [BepInPlugin("bnl.community.launcher", "BNL Launcher Patches", "1.2.0")]
     public class LauncherPlugin : BaseUnityPlugin
     {
+        internal const string CurrentVersion = "1.2.0";
+        private const string GitHubRepo = "devprbtt/bnl-bepinex-plugins";
+
         internal static string DefaultServerHost = "v310.blocknload.pauldh.nl";
         internal static int DefaultServerPort = 28100;
         internal static ManualLogSource Log = null!;
         internal static string CardTexturesDir = string.Empty;
+        internal static string PluginDir = string.Empty;
         private static readonly Dictionary<string, string> ShopOverrideFiles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private static readonly Dictionary<string, Sprite> ShopOverrideSprites = new Dictionary<string, Sprite>(StringComparer.OrdinalIgnoreCase);
         private static readonly HashSet<string> LoggedMissingIcons = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private static bool _filesIndexed;
+        private static bool _updateCheckDone;
+        private static string _versionFilePath = string.Empty;
 
         private void Awake()
         {
@@ -44,10 +50,11 @@ namespace BnlPlugins.Launcher
 
             WriteServersFile(gameRoot);
             ApplyHarmonyPatches();
+            StartUpdateCheck();
 
             Logger.Log(BepInEx.Logging.LogLevel.Info,
-                string.Format("[BNL Launcher] Ready. Server: {0}:{1}",
-                    DefaultServerHost, DefaultServerPort));
+                string.Format("[BNL Launcher] Ready v{0}. Server: {1}:{2}",
+                    CurrentVersion, DefaultServerHost, DefaultServerPort));
         }
 
         private void LoadConfig()
@@ -110,9 +117,10 @@ namespace BnlPlugins.Launcher
 
         private void InitializeImageOverridePaths()
         {
-            string pluginDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? Paths.PluginPath;
-            CardTexturesDir = Path.Combine(Path.Combine(pluginDir, "Launcher"), "CardTextures");
+            PluginDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? Paths.PluginPath;
+            CardTexturesDir = Path.Combine(Path.Combine(PluginDir, "Launcher"), "CardTextures");
             Directory.CreateDirectory(CardTexturesDir);
+            _versionFilePath = Path.Combine(Path.Combine(PluginDir, "Launcher"), "version.txt");
         }
 
         private void ApplyHarmonyPatches()
@@ -370,6 +378,215 @@ namespace BnlPlugins.Launcher
             return type
                 .GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)
                 .FirstOrDefault(m => m.Name == name && m.GetParameters().Length == parameterCount);
+        }
+
+        // ── Update Check ────────────────────────────────────────────
+
+        private void StartUpdateCheck()
+        {
+            if (_updateCheckDone)
+                return;
+
+            // Read installed version from file
+            string installedVersion = CurrentVersion;
+            if (File.Exists(_versionFilePath))
+            {
+                try
+                {
+                    string fileVersion = File.ReadAllText(_versionFilePath).Trim();
+                    if (!string.IsNullOrEmpty(fileVersion))
+                        installedVersion = fileVersion;
+                }
+                catch { }
+            }
+
+            // Write current version so we know what was last installed
+            try
+            {
+                File.WriteAllText(_versionFilePath, CurrentVersion);
+            }
+            catch { }
+
+            StartCoroutine(CheckForUpdatesCoroutine());
+        }
+
+        private System.Collections.IEnumerator CheckForUpdatesCoroutine()
+        {
+            // Wait for the game to fully load before showing any UI
+            yield return new WaitForSeconds(10f);
+
+            if (_updateCheckDone)
+                yield break;
+
+            _updateCheckDone = true;
+
+            string latestVersion = null;
+            string releaseUrl = null;
+
+            try
+            {
+                using (var client = new System.Net.WebClient())
+                {
+                    client.Headers.Add("User-Agent", "BNL-Launcher");
+                    string apiUrl = "https://api.github.com/repos/" + GitHubRepo + "/releases/latest";
+                    string json = client.DownloadString(apiUrl);
+
+                    // Simple JSON parsing without Newtonsoft (not available in .NET 3.5)
+                    latestVersion = ExtractJsonString(json, "tag_name");
+                    releaseUrl = ExtractJsonString(json, "html_url");
+
+                    // Strip 'v' prefix from tag if present
+                    if (latestVersion != null && latestVersion.StartsWith("v", StringComparison.OrdinalIgnoreCase))
+                        latestVersion = latestVersion.Substring(1);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log(BepInEx.Logging.LogLevel.Warning,
+                    "[BNL Launcher] Update check failed: " + ex.Message);
+                yield break;
+            }
+
+            if (string.IsNullOrEmpty(latestVersion))
+                yield break;
+
+            Logger.Log(BepInEx.Logging.LogLevel.Info,
+                "[BNL Launcher] Installed: v" + CurrentVersion + ", Latest: v" + latestVersion);
+
+            if (IsNewerVersion(latestVersion, CurrentVersion))
+            {
+                Logger.Log(BepInEx.Logging.LogLevel.Info,
+                    "[BNL Launcher] New version available: v" + latestVersion);
+                ShowUpdateNotification(latestVersion, releaseUrl);
+            }
+        }
+
+        private static string ExtractJsonString(string json, string key)
+        {
+            string search = "\"" + key + "\":\"";
+            int start = json.IndexOf(search, StringComparison.Ordinal);
+            if (start < 0)
+            {
+                // Try with "key": " (with space)
+                search = "\"" + key + "\": \"";
+                start = json.IndexOf(search, StringComparison.Ordinal);
+            }
+            if (start < 0)
+                return null;
+
+            start += search.Length;
+            int end = json.IndexOf("\"", start, StringComparison.Ordinal);
+            if (end < 0)
+                return null;
+
+            return json.Substring(start, end - start);
+        }
+
+        private static bool IsNewerVersion(string latest, string current)
+        {
+            try
+            {
+                string[] latestParts = latest.Split('.');
+                string[] currentParts = current.Split('.');
+                int maxLen = Math.Max(latestParts.Length, currentParts.Length);
+
+                for (int i = 0; i < maxLen; i++)
+                {
+                    int l = i < latestParts.Length ? int.Parse(latestParts[i]) : 0;
+                    int c = i < currentParts.Length ? int.Parse(currentParts[i]) : 0;
+                    if (l > c) return true;
+                    if (l < c) return false;
+                }
+
+                return false;
+            }
+            catch
+            {
+                // Fallback: string comparison
+                return string.Compare(latest, current, StringComparison.OrdinalIgnoreCase) > 0;
+            }
+        }
+
+        private void ShowUpdateNotification(string newVersion, string releaseUrl)
+        {
+            // Create a persistent GameObject for the notification UI
+            var go = new GameObject("BNL_UpdateNotifier");
+            DontDestroyOnLoad(go);
+            go.AddComponent<UpdateNotifier>().Initialize(newVersion, releaseUrl, CurrentVersion);
+        }
+    }
+
+    /// <summary>
+    /// In-game popup notifying the user about an available update.
+    /// </summary>
+    public class UpdateNotifier : MonoBehaviour
+    {
+        private string _newVersion = "";
+        private string _releaseUrl = "";
+        private string _currentVersion = "";
+        private bool _visible = true;
+        private Rect _windowRect;
+
+        public void Initialize(string newVersion, string releaseUrl, string currentVersion)
+        {
+            _newVersion = newVersion;
+            _releaseUrl = releaseUrl;
+            _currentVersion = currentVersion;
+            _windowRect = new Rect(Screen.width / 2f - 200f, Screen.height / 2f - 90f, 400f, 180f);
+        }
+
+        private void OnGUI()
+        {
+            if (!_visible)
+                return;
+
+            GUI.skin = null; // Use default Unity skin
+            _windowRect = GUI.Window(GetInstanceID(), _windowRect, DrawWindow, "BNL Community Launcher - Update Available");
+        }
+
+        private void DrawWindow(int windowId)
+        {
+            GUILayout.BeginVertical();
+            GUILayout.Space(10);
+
+            GUILayout.Label("A new version of the BNL Community Launcher is available!", 
+                GUI.skin.customStyles.Length > 0 ? GUI.skin.customStyles[0] : GUI.skin.label);
+
+            GUILayout.Space(8);
+
+            GUILayout.Label("Installed: v" + _currentVersion);
+            GUILayout.Label("Latest:    v" + _newVersion);
+
+            GUILayout.Space(12);
+
+            GUILayout.Label("New plugins or features may be available.");
+
+            GUILayout.Space(16);
+
+            GUILayout.BeginHorizontal();
+            GUILayout.FlexibleSpace();
+
+            if (GUILayout.Button("Download Update", GUILayout.Width(140), GUILayout.Height(30)))
+            {
+                if (!string.IsNullOrEmpty(_releaseUrl))
+                    Application.OpenURL(_releaseUrl);
+                _visible = false;
+                Destroy(gameObject);
+            }
+
+            GUILayout.Space(10);
+
+            if (GUILayout.Button("Remind Me Later", GUILayout.Width(140), GUILayout.Height(30)))
+            {
+                _visible = false;
+                Destroy(gameObject);
+            }
+
+            GUILayout.FlexibleSpace();
+            GUILayout.EndHorizontal();
+
+            GUILayout.EndVertical();
+            GUI.DragWindow(new Rect(0, 0, 10000, 20));
         }
     }
 
