@@ -28,11 +28,10 @@ namespace BnlPlugins.Launcher
         internal static int DefaultServerPort = 28100;
         internal static ManualLogSource Log = null!;
         internal static string CardTexturesDir = string.Empty;
-        internal static string TextureMapPath = string.Empty;
-        private static readonly Dictionary<string, string> ShopOverrideMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, string> ShopOverrideFiles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private static readonly Dictionary<string, Sprite> ShopOverrideSprites = new Dictionary<string, Sprite>(StringComparer.OrdinalIgnoreCase);
         private static readonly HashSet<string> LoggedMissingIcons = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        private static bool _mapLoaded;
+        private static bool _filesIndexed;
 
         private void Awake()
         {
@@ -113,7 +112,6 @@ namespace BnlPlugins.Launcher
         {
             CardTexturesDir = Path.Combine(Paths.GameRootPath, @"BepInEx\plugins\CardTextures");
             Directory.CreateDirectory(CardTexturesDir);
-            TextureMapPath = Path.Combine(CardTexturesDir, "texture-map.txt");
         }
 
         private void ApplyHarmonyPatches()
@@ -255,19 +253,15 @@ namespace BnlPlugins.Launcher
             if (string.IsNullOrEmpty(iconName))
                 return null;
 
-            EnsureShopOverrideMapLoaded();
+            EnsureShopOverrideFilesIndexed();
 
-            string mappedPath;
-            if (!ShopOverrideMap.TryGetValue(iconName, out mappedPath))
+            string fullPath;
+            if (!TryResolveOverridePath(iconName, out fullPath))
                 return null;
 
             Sprite cachedSprite;
             if (ShopOverrideSprites.TryGetValue(iconName, out cachedSprite) && cachedSprite != null)
                 return cachedSprite;
-
-            string fullPath = Path.IsPathRooted(mappedPath)
-                ? mappedPath
-                : Path.Combine(CardTexturesDir, mappedPath);
 
             if (!File.Exists(fullPath))
             {
@@ -305,39 +299,62 @@ namespace BnlPlugins.Launcher
             }
         }
 
-        private static void EnsureShopOverrideMapLoaded()
+        private static void EnsureShopOverrideFilesIndexed()
         {
-            if (_mapLoaded)
+            if (_filesIndexed)
                 return;
 
-            _mapLoaded = true;
-            ShopOverrideMap.Clear();
+            _filesIndexed = true;
+            ShopOverrideFiles.Clear();
 
-            if (!File.Exists(TextureMapPath))
+            if (!Directory.Exists(CardTexturesDir))
             {
-                Log.LogInfo("[BNL Launcher] No texture-map.txt found at " + TextureMapPath);
+                Log.LogInfo("[BNL Launcher] No CardTextures directory found at " + CardTexturesDir);
                 return;
             }
 
-            foreach (string rawLine in File.ReadAllLines(TextureMapPath))
+            string[] allowedExtensions = { ".png", ".jpg", ".jpeg" };
+            foreach (string path in Directory.GetFiles(CardTexturesDir))
             {
-                string line = rawLine.Trim();
-                if (line.Length == 0 || line.StartsWith("#", StringComparison.Ordinal) || !line.Contains("="))
+                string extension = Path.GetExtension(path);
+                if (!allowedExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase))
                     continue;
 
-                int eqIndex = line.IndexOf('=');
-                if (eqIndex <= 0 || eqIndex >= line.Length - 1)
+                string key = Path.GetFileNameWithoutExtension(path);
+                if (string.IsNullOrEmpty(key))
                     continue;
 
-                string key = line.Substring(0, eqIndex).Trim();
-                string value = line.Substring(eqIndex + 1).Trim();
-                if (key.Length == 0 || value.Length == 0)
-                    continue;
-
-                ShopOverrideMap[key] = value;
+                ShopOverrideFiles[key] = path;
             }
 
-            Log.LogInfo("[BNL Launcher] Loaded " + ShopOverrideMap.Count + " shop image override mappings.");
+            Log.LogInfo("[BNL Launcher] Indexed " + ShopOverrideFiles.Count + " card override image files from " + CardTexturesDir);
+        }
+
+        private static bool TryResolveOverridePath(string iconName, out string fullPath)
+        {
+            foreach (string candidate in GetOverrideCandidates(iconName))
+            {
+                if (ShopOverrideFiles.TryGetValue(candidate, out fullPath))
+                    return true;
+            }
+
+            fullPath = string.Empty;
+            return false;
+        }
+
+        private static IEnumerable<string> GetOverrideCandidates(string iconName)
+        {
+            yield return iconName;
+
+            if (iconName.StartsWith("shop_item_", StringComparison.OrdinalIgnoreCase))
+            {
+                yield return iconName.Substring("shop_item_".Length);
+            }
+
+            if (iconName.StartsWith("shop_", StringComparison.OrdinalIgnoreCase))
+            {
+                yield return iconName.Substring("shop_".Length);
+            }
         }
 
         private static MethodInfo? FindInstanceMethod(Type type, string name, int parameterCount)
