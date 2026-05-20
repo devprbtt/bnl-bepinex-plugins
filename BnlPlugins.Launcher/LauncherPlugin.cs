@@ -589,16 +589,21 @@ namespace BnlPlugins.Launcher
     }
 
     /// <summary>
-    /// In-game popup notifying the user about an available update.
+    /// In-game popup for update notification. Downloads the installer exe from
+    /// GitHub and launches it so the user can pick plugins and install.
     /// </summary>
     public class UpdateNotifier : MonoBehaviour
     {
+        private const string RepoOwner = "devprbtt";
+        private const string RepoName = "bnl-bepinex-plugins";
         private string _newVersion = "";
         private string _releaseUrl = "";
         private string _currentVersion = "";
         private string _releaseName = "";
         private string _releaseBody = "";
         private bool _visible = true;
+        private bool _downloading;
+        private string _downloadStatus = "";
         private Rect _windowRect;
         private Vector2 _scrollPos;
 
@@ -624,7 +629,7 @@ namespace BnlPlugins.Launcher
 
         private void DrawWindow(int windowId)
         {
-            _scrollPos = GUILayout.BeginScrollView(_scrollPos, GUILayout.Height(260));
+            _scrollPos = GUILayout.BeginScrollView(_scrollPos, GUILayout.Height(220));
 
             GUILayout.Label("A new version is available!", new GUIStyle(GUI.skin.label)
             {
@@ -649,7 +654,6 @@ namespace BnlPlugins.Launcher
             {
                 GUILayout.Space(8);
 
-                // Show body lines as separate labels (IMGUI doesn't do rich text well)
                 string[] lines = _releaseBody.Split('\n');
                 int shown = 0;
                 foreach (string line in lines)
@@ -657,62 +661,182 @@ namespace BnlPlugins.Launcher
                     string trimmed = line.Trim();
                     if (trimmed.Length == 0 && shown == 0)
                         continue;
-                    if (shown >= 25)
+                    if (shown >= 20)
                         break;
 
                     GUIStyle style = GUI.skin.label;
                     if (trimmed.StartsWith("## "))
-                    {
-                        trimmed = trimmed.Substring(3);
-                        style = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold };
-                    }
+                        { trimmed = trimmed.Substring(3); style = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold }; }
                     else if (trimmed.StartsWith("# "))
-                    {
-                        trimmed = trimmed.Substring(2);
-                        style = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold, fontSize = 11 };
-                    }
+                        { trimmed = trimmed.Substring(2); style = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold, fontSize = 11 }; }
                     else if (trimmed.StartsWith("- "))
-                    {
-                        trimmed = "  " + trimmed;
-                    }
+                        { trimmed = "  " + trimmed; }
 
                     GUILayout.Label(trimmed.Length > 0 ? trimmed : " ", style);
                     shown++;
                 }
 
-                if (shown >= 25)
+                if (shown >= 20)
                     GUILayout.Label("... (see release page for full details)");
             }
 
             GUILayout.EndScrollView();
 
-            GUILayout.Space(8);
+            GUILayout.Space(6);
 
-            GUILayout.BeginHorizontal();
-            GUILayout.FlexibleSpace();
-
-            if (GUILayout.Button("Download v" + _newVersion, GUILayout.Width(160), GUILayout.Height(32)))
+            if (_downloading)
             {
-                if (!string.IsNullOrEmpty(_releaseUrl))
-                    Application.OpenURL(_releaseUrl);
-                _visible = false;
-                Destroy(gameObject);
+                GUILayout.Label(_downloadStatus, new GUIStyle(GUI.skin.label)
+                {
+                    normal = { textColor = Color.cyan },
+                    alignment = TextAnchor.MiddleCenter
+                });
+
+                if (GUILayout.Button("Cancel", GUILayout.Width(100)))
+                {
+                    _downloading = false;
+                    _downloadStatus = "";
+                }
             }
-
-            GUILayout.Space(12);
-
-            if (GUILayout.Button("Remind Me Later", GUILayout.Width(140), GUILayout.Height(32)))
+            else
             {
-                _visible = false;
-                Destroy(gameObject);
-            }
+                GUILayout.BeginHorizontal();
+                GUILayout.FlexibleSpace();
 
-            GUILayout.FlexibleSpace();
-            GUILayout.EndHorizontal();
+                if (GUILayout.Button("Download && Install", GUILayout.Width(160), GUILayout.Height(34)))
+                {
+                    StartCoroutine(DownloadAndInstall());
+                }
+
+                GUILayout.Space(12);
+
+                if (GUILayout.Button("Remind Me Later", GUILayout.Width(140), GUILayout.Height(34)))
+                {
+                    _visible = false;
+                    Destroy(gameObject);
+                }
+
+                GUILayout.FlexibleSpace();
+                GUILayout.EndHorizontal();
+            }
 
             GUILayout.Space(6);
 
             GUI.DragWindow(new Rect(0, 0, 10000, 20));
+        }
+
+        private System.Collections.IEnumerator DownloadAndInstall()
+        {
+            _downloading = true;
+            _downloadStatus = "Finding installer...";
+            yield return null;
+
+            string? installerUrl = null;
+            string? downloadError = null;
+
+            // Try to find the installer exe from the GitHub release
+            try
+            {
+                using (var client = new System.Net.WebClient())
+                {
+                    client.Headers.Add("User-Agent", "BNL-Launcher");
+                    string apiUrl = "https://api.github.com/repos/" + RepoOwner + "/" + RepoName + "/releases/latest";
+                    string json = client.DownloadString(apiUrl);
+                    installerUrl = FindInstallerAsset(json);
+                }
+            }
+            catch { }
+
+            // Fallback: construct URL from release tag
+            if (string.IsNullOrEmpty(installerUrl) && !string.IsNullOrEmpty(_releaseUrl))
+            {
+                string tag = _releaseUrl.Substring(_releaseUrl.LastIndexOf('/') + 1);
+                installerUrl = "https://github.com/" + RepoOwner + "/" + RepoName +
+                    "/releases/download/" + tag + "/BNL-Installer.exe";
+            }
+
+            if (string.IsNullOrEmpty(installerUrl))
+            {
+                _downloadStatus = "Could not find installer. Visit the release page.";
+                yield return new WaitForSeconds(3f);
+                _downloading = false;
+                yield break;
+            }
+
+            _downloadStatus = "Downloading BNL-Installer.exe...";
+            yield return null;
+
+            string tempExe = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "BNL-Installer.exe");
+            try
+            {
+                using (var client = new System.Net.WebClient())
+                {
+                    client.Headers.Add("User-Agent", "BNL-Launcher");
+                    client.DownloadFile(installerUrl, tempExe);
+                }
+            }
+            catch (Exception ex)
+            {
+                downloadError = ex.Message;
+            }
+
+            if (downloadError != null)
+            {
+                _downloadStatus = "Download failed: " + downloadError;
+                yield return new WaitForSeconds(3f);
+                _downloading = false;
+                yield break;
+            }
+
+            _downloadStatus = "Launching installer...";
+            yield return new WaitForSeconds(0.5f);
+
+            string? launchError = null;
+            try
+            {
+                System.Diagnostics.Process.Start(tempExe);
+            }
+            catch (Exception ex)
+            {
+                launchError = ex.Message;
+            }
+
+            if (launchError != null)
+            {
+                _downloadStatus = "Could not launch installer. It's at: " + tempExe;
+                yield return new WaitForSeconds(4f);
+            }
+            else
+            {
+                _downloadStatus = "Installer launched! Follow the steps to update.";
+                yield return new WaitForSeconds(3f);
+            }
+
+            _visible = false;
+            Destroy(gameObject);
+        }
+
+        private static string? FindInstallerAsset(string json)
+        {
+            int assetsIdx = json.IndexOf("\"assets\":[", StringComparison.Ordinal);
+            if (assetsIdx < 0) return null;
+
+            int searchFrom = assetsIdx;
+            while (true)
+            {
+                int urlIdx = json.IndexOf("\"browser_download_url\":\"", searchFrom, StringComparison.Ordinal);
+                if (urlIdx < 0) return null;
+
+                urlIdx += "\"browser_download_url\":\"".Length;
+                int urlEnd = json.IndexOf("\"", urlIdx, StringComparison.Ordinal);
+                if (urlEnd < 0) return null;
+
+                string candidate = json.Substring(urlIdx, urlEnd - urlIdx);
+                if (candidate.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                    return candidate;
+
+                searchFrom = urlEnd + 1;
+            }
         }
     }
 
