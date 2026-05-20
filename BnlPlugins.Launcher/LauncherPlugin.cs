@@ -110,7 +110,8 @@ namespace BnlPlugins.Launcher
 
         private void InitializeImageOverridePaths()
         {
-            CardTexturesDir = Path.Combine(Paths.GameRootPath, @"BepInEx\plugins\CardTextures");
+            string pluginDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? Paths.PluginPath;
+            CardTexturesDir = Path.Combine(Path.Combine(pluginDir, "Launcher"), "CardTextures");
             Directory.CreateDirectory(CardTexturesDir);
         }
 

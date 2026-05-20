@@ -24,7 +24,7 @@ Launch → BepInEx preloader
 
 `BnlPlugins.Launcher` can override perk/shop card images at runtime from:
 
-`BepInEx/plugins/CardTextures/`
+`BepInEx/plugins/Launcher/CardTextures/`
 
 There is no `texture-map.txt`. The launcher indexes image files in that folder and matches them by filename.
 
@@ -46,7 +46,7 @@ Notes:
 
 - The filename should match the requested card/shop sprite id.
 - The launcher also tries simplified fallback names by stripping `shop_` and `shop_item_`.
-- `tilesheet2.base.png` and `tilesheet3.base.png` may still exist in `CardTextures/` from older experiments, but they are not required for perk/shop card overrides.
+- `tilesheet2.base.png` and `tilesheet3.base.png` may still exist in `Launcher/CardTextures/` from older experiments, but they are not required for perk/shop card overrides.
 
 ## Requirements
 
@@ -95,7 +95,8 @@ BlockNLoad\
     │   └── BepInEx.cfg      ← Pre-configured for Unity 5
     └── plugins\
         ├── BnlPlugins.Launcher.dll
-        └── CardTextures\     ← Optional runtime card image overrides
+        └── Launcher\
+            └── CardTextures\     ← Optional runtime card image overrides
 ```
 
 After copying, place the built plugin DLLs into `BepInEx/plugins/`.
@@ -169,7 +170,7 @@ After running the game with BepInEx installed, check for:
 - **Console window** appearing alongside the game (shows BepInEx loading)
 - **`BepInEx/LogOutput.log`** — should show plugin loading messages
 - **`BepInEx/config/BnlPlugins.Launcher.cfg`** — launcher config file
-- **`BepInEx/plugins/CardTextures/`** — optional card/shop override images
+- **`BepInEx/plugins/Launcher/CardTextures/`** — optional card/shop override images
 
 ## Configuration
 
