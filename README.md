@@ -22,6 +22,34 @@ Launch → BepInEx preloader
        → Game connects to community server
 ```
 
+## Card Image Overrides
+
+`BnlPlugins.Launcher` can override perk/shop card images at runtime from:
+
+`BepInEx/plugins/CardTextures/`
+
+There is no `texture-map.txt`. The launcher indexes image files in that folder and matches them by filename.
+
+Use the in-game shop image id as the filename, for example:
+
+```
+shop_perk_def_last_stand_momentum.png
+shop_perk_off_heal_bane.png
+shop_perk_hero_eliza_beautiful_bubbles.png
+```
+
+Supported image formats:
+
+- `.png`
+- `.jpg`
+- `.jpeg`
+
+Notes:
+
+- The filename should match the requested card/shop sprite id.
+- The launcher also tries simplified fallback names by stripping `shop_` and `shop_item_`.
+- `tilesheet2.base.png` and `tilesheet3.base.png` may still exist in `CardTextures/` from older experiments, but they are not required for perk/shop card overrides.
+
 ## Requirements
 
 - **BepInEx 5.4.23** (x64) — the `bepinex-dist/` folder contains a pre-configured copy
@@ -68,7 +96,10 @@ BlockNLoad\
     │   └── Mono.Cecil.dll
     ├── config\
     │   └── BepInEx.cfg      ← Pre-configured for Unity 5
-    └── plugins\              ← Put BnlPlugins.Launcher.dll / BnlPlugins.Fov.dll here
+    └── plugins\
+        ├── BnlPlugins.Launcher.dll
+        ├── BnlPlugins.Fov.dll
+        └── CardTextures\     ← Optional runtime card image overrides
 ```
 
 After copying, place the built plugin DLLs into `BepInEx/plugins/`.
@@ -143,6 +174,7 @@ After running the game with BepInEx installed, check for:
 - **`BepInEx/LogOutput.log`** — should show plugin loading messages
 - **`BepInEx/config/BnlPlugins.Launcher.cfg`** — launcher config file
 - **`BepInEx/config/bnl.community.fov.cfg`** — FOV config file
+- **`BepInEx/plugins/CardTextures/`** — optional card/shop override images
 
 ## Configuration
 
