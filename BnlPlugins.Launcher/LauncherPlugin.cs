@@ -44,6 +44,15 @@ namespace BnlPlugins.Launcher
         private void Awake()
         {
             Log = Logger;
+
+            // Unity 5 Mono doesn't negotiate TLS 1.2 by default — required for GitHub API
+            try
+            {
+                System.Net.ServicePointManager.SecurityProtocol =
+                    System.Net.SecurityProtocolType.Tls12 | System.Net.SecurityProtocolType.Tls11;
+            }
+            catch { }
+
             LoadConfig();
             InitializeImageOverridePaths();
 
