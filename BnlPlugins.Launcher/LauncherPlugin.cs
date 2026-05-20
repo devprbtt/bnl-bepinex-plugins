@@ -38,6 +38,8 @@ namespace BnlPlugins.Launcher
         private static bool _filesIndexed;
         private static bool _updateCheckDone;
         private static string _versionFilePath = string.Empty;
+        private static string _lastCheckFilePath = string.Empty;
+        private static bool _checkRequested;
 
         private void Awake()
         {
@@ -121,6 +123,7 @@ namespace BnlPlugins.Launcher
             CardTexturesDir = Path.Combine(Path.Combine(PluginDir, "Launcher"), "CardTextures");
             Directory.CreateDirectory(CardTexturesDir);
             _versionFilePath = Path.Combine(Path.Combine(PluginDir, "Launcher"), "version.txt");
+            _lastCheckFilePath = Path.Combine(Path.Combine(PluginDir, "Launcher"), "last_check.txt");
         }
 
         private void ApplyHarmonyPatches()
@@ -407,15 +410,47 @@ namespace BnlPlugins.Launcher
             }
             catch { }
 
-            StartCoroutine(CheckForUpdatesCoroutine());
+            // Check rate limit — only auto-check once per 24 hours
+            bool shouldCheck = true;
+            if (File.Exists(_lastCheckFilePath))
+            {
+                try
+                {
+                    string lastCheckStr = File.ReadAllText(_lastCheckFilePath).Trim();
+                    if (long.TryParse(lastCheckStr, out long lastCheckTicks))
+                    {
+                        var lastCheck = new DateTime(lastCheckTicks, DateTimeKind.Utc);
+                        if ((DateTime.UtcNow - lastCheck).TotalHours < 24)
+                        {
+                            shouldCheck = false;
+                            Logger.Log(BepInEx.Logging.LogLevel.Info,
+                                "[BNL Launcher] Skipping update check (last check: " +
+                                lastCheck.ToLocalTime().ToString("g") + ")");
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            if (shouldCheck)
+            {
+                StartCoroutine(CheckForUpdatesCoroutine(false));
+            }
         }
 
-        private System.Collections.IEnumerator CheckForUpdatesCoroutine()
+        /// <summary>Force an update check, bypassing rate limit. Call from UI or config.</summary>
+        internal static void RequestUpdateCheck()
+        {
+            _checkRequested = true;
+        }
+
+        private System.Collections.IEnumerator CheckForUpdatesCoroutine(bool force)
         {
             // Wait for the game to fully load before showing any UI
             yield return new WaitForSeconds(10f);
 
-            if (_updateCheckDone)
+            // Handle manual re-check requests (bypasses rate limit and _updateCheckDone)
+            if (!force && _updateCheckDone)
                 yield break;
 
             _updateCheckDone = true;
@@ -424,6 +459,7 @@ namespace BnlPlugins.Launcher
             string releaseUrl = null;
             string releaseName = null;
             string releaseBody = null;
+            string zipDownloadUrl = null;
 
             try
             {
@@ -433,16 +469,22 @@ namespace BnlPlugins.Launcher
                     string apiUrl = "https://api.github.com/repos/" + GitHubRepo + "/releases/latest";
                     string json = client.DownloadString(apiUrl);
 
-                    // Simple JSON parsing without Newtonsoft (not available in .NET 3.5)
                     latestVersion = ExtractJsonString(json, "tag_name");
                     releaseUrl = ExtractJsonString(json, "html_url");
                     releaseName = ExtractJsonString(json, "name");
                     releaseBody = ExtractJsonBody(json);
+                    zipDownloadUrl = FindZipAsset(json);
 
-                    // Strip 'v' prefix from tag if present
                     if (latestVersion != null && latestVersion.StartsWith("v", StringComparison.OrdinalIgnoreCase))
                         latestVersion = latestVersion.Substring(1);
                 }
+
+                // Record successful check timestamp
+                try
+                {
+                    File.WriteAllText(_lastCheckFilePath, DateTime.UtcNow.Ticks.ToString());
+                }
+                catch { }
             }
             catch (Exception ex)
             {
@@ -461,7 +503,38 @@ namespace BnlPlugins.Launcher
             {
                 Logger.Log(BepInEx.Logging.LogLevel.Info,
                     "[BNL Launcher] New version available: v" + latestVersion);
-                ShowUpdateNotification(latestVersion, releaseUrl, releaseName, releaseBody);
+                ShowUpdateNotification(latestVersion, releaseUrl, releaseName, releaseBody, zipDownloadUrl);
+            }
+            else if (force)
+            {
+                // User manually checked — tell them they're up to date
+                var go = new GameObject("BNL_UpdateNotifier");
+                DontDestroyOnLoad(go);
+                go.AddComponent<UpdateNotifier>().InitializeUpToDate(CurrentVersion);
+            }
+        }
+
+        /// <summary>Find the .zip asset browser_download_url from the GitHub release JSON.</summary>
+        private static string? FindZipAsset(string json)
+        {
+            int assetsIdx = json.IndexOf("\"assets\":[", StringComparison.Ordinal);
+            if (assetsIdx < 0) return null;
+
+            int searchFrom = assetsIdx;
+            while (true)
+            {
+                int urlIdx = json.IndexOf("\"browser_download_url\":\"", searchFrom, StringComparison.Ordinal);
+                if (urlIdx < 0) return null;
+
+                urlIdx += "\"browser_download_url\":\"".Length;
+                int urlEnd = json.IndexOf("\"", urlIdx, StringComparison.Ordinal);
+                if (urlEnd < 0) return null;
+
+                string candidate = json.Substring(urlIdx, urlEnd - urlIdx);
+                if (candidate.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                    return candidate;
+
+                searchFrom = urlEnd + 1;
             }
         }
 
@@ -580,11 +653,13 @@ namespace BnlPlugins.Launcher
             }
         }
 
-        private void ShowUpdateNotification(string newVersion, string releaseUrl, string releaseName, string releaseBody)
+        private void ShowUpdateNotification(string newVersion, string releaseUrl,
+            string releaseName, string releaseBody, string? zipDownloadUrl)
         {
             var go = new GameObject("BNL_UpdateNotifier");
             DontDestroyOnLoad(go);
-            go.AddComponent<UpdateNotifier>().Initialize(newVersion, releaseUrl, CurrentVersion, releaseName, releaseBody);
+            go.AddComponent<UpdateNotifier>().Initialize(
+                newVersion, releaseUrl, CurrentVersion, releaseName, releaseBody, zipDownloadUrl);
         }
     }
 
@@ -601,21 +676,44 @@ namespace BnlPlugins.Launcher
         private string _currentVersion = "";
         private string _releaseName = "";
         private string _releaseBody = "";
+        private string? _zipUrl;
         private bool _visible = true;
         private bool _downloading;
+        private bool _upToDate;
         private string _downloadStatus = "";
+        private string _errorMessage = "";
         private Rect _windowRect;
         private Vector2 _scrollPos;
 
         public void Initialize(string newVersion, string releaseUrl, string currentVersion,
-            string releaseName, string releaseBody)
+            string releaseName, string releaseBody, string? zipDownloadUrl)
         {
             _newVersion = newVersion;
             _releaseUrl = releaseUrl;
             _currentVersion = currentVersion;
             _releaseName = releaseName ?? "";
             _releaseBody = releaseBody ?? "";
+            _zipUrl = zipDownloadUrl;  // unused field - will use later
             _windowRect = new Rect(Screen.width / 2f - 230f, Screen.height / 2f - 170f, 460f, 340f);
+        }
+
+        /// <summary>Shown when user manually checks and is already up to date.</summary>
+        public void InitializeUpToDate(string currentVersion)
+        {
+            _upToDate = true;
+            _currentVersion = currentVersion;
+            _windowRect = new Rect(Screen.width / 2f - 180f, Screen.height / 2f - 40f, 360f, 80f);
+        }
+
+        private void Update()
+        {
+            if (_visible && !_downloading && Input.GetKeyDown(KeyCode.F5))
+            {
+                _visible = false;
+                Destroy(gameObject);
+                LauncherPlugin.RequestUpdateCheck();
+                LauncherPlugin.Log.LogInfo("[BNL Launcher] Manual update check requested (F5)");
+            }
         }
 
         private void OnGUI()
@@ -623,8 +721,28 @@ namespace BnlPlugins.Launcher
             if (!_visible)
                 return;
 
+            if (_upToDate)
+            {
+                _windowRect = GUI.Window(GetInstanceID() + 1, _windowRect, DrawUpToDateWindow,
+                    "BNL Launcher - Up to Date");
+                return;
+            }
+
             _windowRect = GUI.Window(GetInstanceID(), _windowRect, DrawWindow,
                 "BNL Launcher - Update v" + _newVersion + " Available");
+        }
+
+        private void DrawUpToDateWindow(int windowId)
+        {
+            GUILayout.Label("You're up to date! v" + _currentVersion + " is the latest version.",
+                new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter });
+            GUILayout.Space(8);
+            if (GUILayout.Button("OK"))
+            {
+                _visible = false;
+                Destroy(gameObject);
+            }
+            GUI.DragWindow(new Rect(0, 0, 10000, 20));
         }
 
         private void DrawWindow(int windowId)
@@ -703,14 +821,14 @@ namespace BnlPlugins.Launcher
                 GUILayout.BeginHorizontal();
                 GUILayout.FlexibleSpace();
 
-                if (GUILayout.Button("Download && Install", GUILayout.Width(160), GUILayout.Height(34)))
+                if (GUILayout.Button("Download && Update", GUILayout.Width(150), GUILayout.Height(34)))
                 {
-                    StartCoroutine(DownloadAndInstall());
+                    StartCoroutine(DownloadAndExtract());
                 }
 
                 GUILayout.Space(12);
 
-                if (GUILayout.Button("Remind Me Later", GUILayout.Width(140), GUILayout.Height(34)))
+                if (GUILayout.Button("Remind Later", GUILayout.Width(120), GUILayout.Height(34)))
                 {
                     _visible = false;
                     Destroy(gameObject);
@@ -718,6 +836,10 @@ namespace BnlPlugins.Launcher
 
                 GUILayout.FlexibleSpace();
                 GUILayout.EndHorizontal();
+
+                GUILayout.Space(4);
+                GUILayout.Label("Tip: Press F5 to manually re-check for updates",
+                    new GUIStyle(GUI.skin.label) { fontSize = 8, alignment = TextAnchor.MiddleCenter });
             }
 
             GUILayout.Space(6);
@@ -725,118 +847,116 @@ namespace BnlPlugins.Launcher
             GUI.DragWindow(new Rect(0, 0, 10000, 20));
         }
 
-        private System.Collections.IEnumerator DownloadAndInstall()
+        private System.Collections.IEnumerator DownloadAndExtract()
         {
             _downloading = true;
-            _downloadStatus = "Finding installer...";
+            _downloadStatus = "Preparing download...";
+            _errorMessage = "";
             yield return null;
 
-            string? installerUrl = null;
-            string? downloadError = null;
-
-            // Try to find the installer exe from the GitHub release
-            try
-            {
-                using (var client = new System.Net.WebClient())
-                {
-                    client.Headers.Add("User-Agent", "BNL-Launcher");
-                    string apiUrl = "https://api.github.com/repos/" + RepoOwner + "/" + RepoName + "/releases/latest";
-                    string json = client.DownloadString(apiUrl);
-                    installerUrl = FindInstallerAsset(json);
-                }
-            }
-            catch { }
-
-            // Fallback: construct URL from release tag
-            if (string.IsNullOrEmpty(installerUrl) && !string.IsNullOrEmpty(_releaseUrl))
+            string? zipUrl = _zipUrl;
+            if (string.IsNullOrEmpty(zipUrl) && !string.IsNullOrEmpty(_releaseUrl))
             {
                 string tag = _releaseUrl.Substring(_releaseUrl.LastIndexOf('/') + 1);
-                installerUrl = "https://github.com/" + RepoOwner + "/" + RepoName +
-                    "/releases/download/" + tag + "/BNL-Installer.exe";
+                zipUrl = "https://github.com/" + RepoOwner + "/" + RepoName +
+                    "/releases/download/" + tag + "/bnl-bepinex-plugins-" + _newVersion + ".zip";
             }
 
-            if (string.IsNullOrEmpty(installerUrl))
+            if (string.IsNullOrEmpty(zipUrl))
             {
-                _downloadStatus = "Could not find installer. Visit the release page.";
-                yield return new WaitForSeconds(3f);
+                _errorMessage = "Could not find download URL.";
                 _downloading = false;
                 yield break;
             }
 
-            _downloadStatus = "Downloading BNL-Installer.exe...";
+            _downloadStatus = "Downloading update...";
             yield return null;
 
-            string tempExe = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "BNL-Installer.exe");
+            string tempZip = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "bnl-update.zip");
+            string? downloadError = null;
             try
             {
                 using (var client = new System.Net.WebClient())
                 {
                     client.Headers.Add("User-Agent", "BNL-Launcher");
-                    client.DownloadFile(installerUrl, tempExe);
+                    client.DownloadFile(zipUrl, tempZip);
                 }
             }
-            catch (Exception ex)
-            {
-                downloadError = ex.Message;
-            }
+            catch (Exception ex) { downloadError = ex.Message; }
 
             if (downloadError != null)
             {
-                _downloadStatus = "Download failed: " + downloadError;
-                yield return new WaitForSeconds(3f);
+                _errorMessage = "Download failed: " + downloadError;
                 _downloading = false;
                 yield break;
             }
 
-            _downloadStatus = "Launching installer...";
-            yield return new WaitForSeconds(0.5f);
+            _downloadStatus = "Extracting files...";
+            yield return null;
 
-            string? launchError = null;
+            string? extractError = null;
+            bool needsRestart = false;
             try
             {
-                System.Diagnostics.Process.Start(tempExe);
+                string gameRoot = System.IO.Path.GetDirectoryName(
+                    System.IO.Path.GetDirectoryName(
+                        System.IO.Path.GetDirectoryName(
+                            System.Reflection.Assembly.GetExecutingAssembly().Location))) ?? ".";
+
+                string win64Dir = System.IO.Path.Combine(gameRoot, "Win64");
+
+                // .NET 3.5 doesn't have ZipFile — use PowerShell for extraction
+                var psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "powershell.exe",
+                    Arguments = "-NoProfile -NonInteractive -Command \"Expand-Archive -Path '" +
+                        tempZip + "' -DestinationPath '" + win64Dir + "' -Force\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                };
+
+                using (var proc = System.Diagnostics.Process.Start(psi))
+                {
+                    if (proc == null)
+                        throw new Exception("Could not start PowerShell");
+                    proc.WaitForExit(30000);
+                    if (proc.ExitCode != 0)
+                    {
+                        string err = proc.StandardError.ReadToEnd();
+                        throw new Exception("PowerShell exited with code " + proc.ExitCode +
+                            (string.IsNullOrEmpty(err) ? "" : ": " + err));
+                    }
+                }
+
+                // Update version file
+                string versionFile = System.IO.Path.Combine(
+                    System.IO.Path.Combine(
+                        System.IO.Path.Combine(
+                            System.IO.Path.Combine(win64Dir, "BepInEx"), "plugins"), "Launcher"), "version.txt");
+                try { System.IO.File.WriteAllText(versionFile, _newVersion); } catch { }
+
+                // Clean up temp
+                try { System.IO.File.Delete(tempZip); } catch { }
             }
-            catch (Exception ex)
+            catch (Exception ex) { extractError = ex.Message; }
+
+            if (extractError != null)
             {
-                launchError = ex.Message;
+                _errorMessage = "Extract failed: " + extractError;
+                _downloading = false;
+                yield break;
             }
 
-            if (launchError != null)
-            {
-                _downloadStatus = "Could not launch installer. It's at: " + tempExe;
-                yield return new WaitForSeconds(4f);
-            }
-            else
-            {
-                _downloadStatus = "Installer launched! Follow the steps to update.";
-                yield return new WaitForSeconds(3f);
-            }
+            _downloadStatus = "Updated to v" + _newVersion + "!";
+            if (needsRestart)
+                _downloadStatus += " (restart game for plugin update)";
+
+            yield return new WaitForSeconds(3f);
 
             _visible = false;
             Destroy(gameObject);
-        }
-
-        private static string? FindInstallerAsset(string json)
-        {
-            int assetsIdx = json.IndexOf("\"assets\":[", StringComparison.Ordinal);
-            if (assetsIdx < 0) return null;
-
-            int searchFrom = assetsIdx;
-            while (true)
-            {
-                int urlIdx = json.IndexOf("\"browser_download_url\":\"", searchFrom, StringComparison.Ordinal);
-                if (urlIdx < 0) return null;
-
-                urlIdx += "\"browser_download_url\":\"".Length;
-                int urlEnd = json.IndexOf("\"", urlIdx, StringComparison.Ordinal);
-                if (urlEnd < 0) return null;
-
-                string candidate = json.Substring(urlIdx, urlEnd - urlIdx);
-                if (candidate.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
-                    return candidate;
-
-                searchFrom = urlEnd + 1;
-            }
         }
     }
 
