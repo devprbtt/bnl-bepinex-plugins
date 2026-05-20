@@ -64,7 +64,7 @@ Add-Type -AssemblyName System.Drawing
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "BNL Community Launcher - Installer"
-$form.Size = New-Object System.Drawing.Size(520, 480)
+$form.Size = New-Object System.Drawing.Size(520, 500)
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = "FixedDialog"
 $form.MaximizeBox = $false
@@ -168,7 +168,7 @@ $progressBar.Location = New-Object System.Drawing.Point(15, 395)
 $btnInstall = New-Object System.Windows.Forms.Button
 $btnInstall.Text = "Install"
 $btnInstall.Size = New-Object System.Drawing.Size(100, 30)
-$btnInstall.Location = New-Object System.Drawing.Point(200, 425)
+$btnInstall.Location = New-Object System.Drawing.Point(200, 415)
 $btnInstall.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
 
 # ── Events ────────────────────────────────────────────────────────────
