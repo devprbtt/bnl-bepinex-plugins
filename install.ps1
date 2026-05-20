@@ -192,27 +192,45 @@ $btnInstall.Add_Click({
     
     $btnInstall.Enabled = $false
     $progressBar.Visible = $true
-    $lblStatus.Text = "Downloading latest release..."
     $form.Refresh()
     
     try {
-        # Download release info
-        $releaseUrl = "https://api.github.com/repos/$RepoOwner/$RepoName/releases/latest"
-        $webClient = New-Object System.Net.WebClient
-        $webClient.Headers.Add("User-Agent", "BNL-Installer")
+        # Find the release zip — check local folder first, then GitHub
+        $scriptDir = Split-Path -Parent (Get-Command $PSCommandPath -ErrorAction SilentlyContinue).Path
+        if (-not $scriptDir) { $scriptDir = Get-Location }
         
-        $releaseJson = $webClient.DownloadString($releaseUrl) | ConvertFrom-Json
-        $zipAsset = $releaseJson.assets | Where-Object { $_.name -like "*.zip" } | Select-Object -First 1
+        $localZip = Get-ChildItem $scriptDir -Filter "bnl-bepinex-plugins-v*.zip" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
         
-        if (-not $zipAsset) {
-            throw "No release zip found on GitHub"
+        if ($localZip) {
+            $tempZip = $localZip.FullName
+            $lblStatus.Text = "Using local: $($localZip.Name)"
+            $form.Refresh()
+        } else {
+            # Download from GitHub
+            $lblStatus.Text = "Downloading latest release..."
+            $form.Refresh()
+            
+            $releaseUrl = "https://api.github.com/repos/$RepoOwner/$RepoName/releases/latest"
+            $webClient = New-Object System.Net.WebClient
+            $webClient.Headers.Add("User-Agent", "BNL-Installer")
+            
+            try {
+                $releaseJson = $webClient.DownloadString($releaseUrl) | ConvertFrom-Json
+            }
+            catch {
+                throw "Could not reach GitHub. Make sure you're online, or place the release zip next to this script.`n`nDownload it from: https://github.com/$RepoOwner/$RepoName/releases"
+            }
+            
+            $zipAsset = $releaseJson.assets | Where-Object { $_.name -like "*.zip" } | Select-Object -First 1
+            if (-not $zipAsset) {
+                throw "No release zip found on GitHub.`n`nVisit: https://github.com/$RepoOwner/$RepoName/releases"
+            }
+            
+            $tempZip = Join-Path $env:TEMP $zipAsset.name
+            $lblStatus.Text = "Downloading $($zipAsset.name)..."
+            $form.Refresh()
+            $webClient.DownloadFile($zipAsset.browser_download_url, $tempZip)
         }
-        
-        # Download zip
-        $tempZip = Join-Path $env:TEMP $zipAsset.name
-        $lblStatus.Text = "Downloading $($zipAsset.name)..."
-        $form.Refresh()
-        $webClient.DownloadFile($zipAsset.browser_download_url, $tempZip)
         
         # Extract
         $lblStatus.Text = "Installing to $gamePath ..."
@@ -274,8 +292,10 @@ $btnInstall.Add_Click({
         }
         $zip.Dispose()
         
-        # Cleanup temp
-        Remove-Item $tempZip -Force -ErrorAction SilentlyContinue
+        # Cleanup temp (only if we downloaded it)
+        if ($tempZip -like "$env:TEMP*") {
+            Remove-Item $tempZip -Force -ErrorAction SilentlyContinue
+        }
         
         $progressBar.Visible = $false
         $lblStatus.Text = ""
