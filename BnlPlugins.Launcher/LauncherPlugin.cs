@@ -45,12 +45,12 @@ namespace BnlPlugins.Launcher
         {
             Log = Logger;
 
-            // Unity 5 Mono doesn't negotiate TLS 1.2 by default — required for GitHub API
-            // .NET 3.5 doesn't have the Tls12 enum, so we use the raw integer value (3072 = 0xC00)
+            // Unity 5 Mono may not support TLS 1.2. We try, but if it fails,
+            // the update check will use Unity's WWW class which handles TLS independently.
             try
             {
                 System.Net.ServicePointManager.SecurityProtocol =
-                    (System.Net.SecurityProtocolType)3072 | (System.Net.SecurityProtocolType)768;
+                    (System.Net.SecurityProtocolType)4080; // 0xFF0 = all protocols
             }
             catch { }
 
@@ -471,23 +471,39 @@ namespace BnlPlugins.Launcher
             string releaseBody = null;
             string zipDownloadUrl = null;
 
+            string apiUrl = "https://api.github.com/repos/" + GitHubRepo + "/releases/latest";
+            string? wwwError = null;
+            string json = "";
+
+            // Unity's WWW handles TLS independently of the Mono runtime
+            using (var www = new WWW(apiUrl))
+            {
+                while (!www.isDone)
+                    yield return null;
+
+                wwwError = www.error;
+                if (string.IsNullOrEmpty(wwwError))
+                    json = www.text;
+            }
+
+            if (!string.IsNullOrEmpty(wwwError))
+            {
+                Logger.Log(BepInEx.Logging.LogLevel.Warning,
+                    "[BNL Launcher] Update check failed: " + wwwError);
+                yield break;
+            }
+
             try
             {
-                using (var client = new System.Net.WebClient())
-                {
-                    client.Headers.Add("User-Agent", "BNL-Launcher");
-                    string apiUrl = "https://api.github.com/repos/" + GitHubRepo + "/releases/latest";
-                    string json = client.DownloadString(apiUrl);
 
-                    latestVersion = ExtractJsonString(json, "tag_name");
-                    releaseUrl = ExtractJsonString(json, "html_url");
-                    releaseName = ExtractJsonString(json, "name");
-                    releaseBody = ExtractJsonBody(json);
-                    zipDownloadUrl = FindZipAsset(json);
+                latestVersion = ExtractJsonString(json, "tag_name");
+                releaseUrl = ExtractJsonString(json, "html_url");
+                releaseName = ExtractJsonString(json, "name");
+                releaseBody = ExtractJsonBody(json);
+                zipDownloadUrl = FindZipAsset(json);
 
-                    if (latestVersion != null && latestVersion.StartsWith("v", StringComparison.OrdinalIgnoreCase))
-                        latestVersion = latestVersion.Substring(1);
-                }
+                if (latestVersion != null && latestVersion.StartsWith("v", StringComparison.OrdinalIgnoreCase))
+                    latestVersion = latestVersion.Substring(1);
 
                 // Record successful check timestamp
                 try
@@ -884,15 +900,23 @@ namespace BnlPlugins.Launcher
 
             string tempZip = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "bnl-update.zip");
             string? downloadError = null;
-            try
+
+            using (var www = new WWW(zipUrl))
             {
-                using (var client = new System.Net.WebClient())
+                while (!www.isDone)
+                    yield return null;
+
+                if (!string.IsNullOrEmpty(www.error))
+                    downloadError = www.error;
+                else
                 {
-                    client.Headers.Add("User-Agent", "BNL-Launcher");
-                    client.DownloadFile(zipUrl, tempZip);
+                    try
+                    {
+                        System.IO.File.WriteAllBytes(tempZip, www.bytes);
+                    }
+                    catch (Exception ex) { downloadError = ex.Message; }
                 }
             }
-            catch (Exception ex) { downloadError = ex.Message; }
 
             if (downloadError != null)
             {
@@ -1048,51 +1072,13 @@ namespace BnlPlugins.Launcher
                 if (playerData == null)
                     return;
 
-                // Try to get the server from servers.txt (player-selected community server)
-                object loginLogic = GetSingletonInstance("LoginLogic");
-                FieldInfo selectorField = loginLogic?.GetType().GetField("ServerSelector",
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                Type helperType = Type.GetType("ServerSelector.ServerSelectorHelper, Assembly-CSharp");
-
-                object selectedServer = null;
-                if (selectorField != null && helperType != null)
-                {
-                    object selector = selectorField.GetValue(loginLogic);
-                    if (selector != null)
-                    {
-                        MethodInfo getSelectedServer = helperType.GetMethod("GetSelectedServer",
-                            BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-                        if (getSelectedServer != null)
-                            selectedServer = getSelectedServer.Invoke(null, new[] { selector });
-                    }
-                }
-
-                if (selectedServer != null)
-                {
-                    // Use the server from servers.txt
-                    FieldInfo masterServerField = playerData.GetType().GetField("MasterServer",
-                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    if (masterServerField != null)
-                    {
-                        masterServerField.SetValue(playerData, selectedServer);
-                        LauncherPlugin.Log.LogInfo("[BNL Launcher] Overrode MasterServer from server selector");
-                        return;
-                    }
-                }
-
-                // Fallback: set community server directly (bypasses servers.txt)
+                // Always use direct override — servers.txt binary patch no longer exists.
+                // The server selector returns official servers, so we bypass it entirely.
                 SetMasterServerDirect(playerData);
             }
             catch (Exception ex)
             {
                 LauncherPlugin.Log.LogError("[BNL Launcher] Failed to override MasterServer: " + ex.Message);
-                // Last resort: direct override
-                try
-                {
-                    object playerData = GetSingletonInstance("PlayerData");
-                    if (playerData != null) SetMasterServerDirect(playerData);
-                }
-                catch { }
             }
         }
 
