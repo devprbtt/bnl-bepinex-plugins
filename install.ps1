@@ -64,7 +64,7 @@ Add-Type -AssemblyName System.Drawing
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "BNL Community Launcher - Installer"
-$form.Size = New-Object System.Drawing.Size(520, 500)
+$form.Size = New-Object System.Drawing.Size(520, 460)
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = "FixedDialog"
 $form.MaximizeBox = $false
@@ -106,7 +106,7 @@ $groupGame.Controls.Add($btnBrowse)
 # Plugins group
 $groupPlugins = New-Object System.Windows.Forms.GroupBox
 $groupPlugins.Text = "Components to Install"
-$groupPlugins.Size = New-Object System.Drawing.Size(480, 175)
+$groupPlugins.Size = New-Object System.Drawing.Size(480, 145)
 $groupPlugins.Location = New-Object System.Drawing.Point(15, 160)
 
 # Mandatory: Card Textures
@@ -125,50 +125,43 @@ $chkBepInEx.Enabled = $false
 $chkBepInEx.Size = New-Object System.Drawing.Size(460, 20)
 $chkBepInEx.Location = New-Object System.Drawing.Point(10, 47)
 
-# Optional: Launcher plugin
+# Mandatory: Launcher plugin
 $chkLauncher = New-Object System.Windows.Forms.CheckBox
-$chkLauncher.Text = "Community Launcher (server connect + EAC bypass)"
+$chkLauncher.Text = "Community Launcher (server connect + EAC bypass) - REQUIRED"
 $chkLauncher.Checked = $true
+$chkLauncher.Enabled = $false
 $chkLauncher.Size = New-Object System.Drawing.Size(460, 20)
 $chkLauncher.Location = New-Object System.Drawing.Point(10, 72)
-
-# Optional: Longshot
-$chkLongshot = New-Object System.Windows.Forms.CheckBox
-$chkLongshot.Text = "Longshot (recoil-free sniper mod)"
-$chkLongshot.Checked = $false
-$chkLongshot.Size = New-Object System.Drawing.Size(460, 20)
-$chkLongshot.Location = New-Object System.Drawing.Point(10, 97)
 
 # Optional: Configuration Manager
 $chkCfgManager = New-Object System.Windows.Forms.CheckBox
 $chkCfgManager.Text = "Configuration Manager (in-game settings menu, press F1)"
 $chkCfgManager.Checked = $true
 $chkCfgManager.Size = New-Object System.Drawing.Size(460, 20)
-$chkCfgManager.Location = New-Object System.Drawing.Point(10, 122)
+$chkCfgManager.Location = New-Object System.Drawing.Point(10, 97)
 
 $groupPlugins.Controls.Add($chkCardTextures)
 $groupPlugins.Controls.Add($chkBepInEx)
 $groupPlugins.Controls.Add($chkLauncher)
-$groupPlugins.Controls.Add($chkLongshot)
 $groupPlugins.Controls.Add($chkCfgManager)
 
 # Progress
 $lblStatus = New-Object System.Windows.Forms.Label
 $lblStatus.Text = ""
 $lblStatus.Size = New-Object System.Drawing.Size(480, 40)
-$lblStatus.Location = New-Object System.Drawing.Point(15, 320)
+$lblStatus.Location = New-Object System.Drawing.Point(15, 315)
 
 $progressBar = New-Object System.Windows.Forms.ProgressBar
 $progressBar.Style = "Marquee"
 $progressBar.Visible = $false
 $progressBar.Size = New-Object System.Drawing.Size(480, 20)
-$progressBar.Location = New-Object System.Drawing.Point(15, 395)
+$progressBar.Location = New-Object System.Drawing.Point(15, 355)
 
 # Install button
 $btnInstall = New-Object System.Windows.Forms.Button
 $btnInstall.Text = "Install"
 $btnInstall.Size = New-Object System.Drawing.Size(100, 30)
-$btnInstall.Location = New-Object System.Drawing.Point(200, 415)
+$btnInstall.Location = New-Object System.Drawing.Point(200, 385)
 $btnInstall.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
 
 # ── Events ────────────────────────────────────────────────────────────
@@ -268,11 +261,6 @@ $btnInstall.Add_Click({
             
             # Check plugin filtering
             $skip = $false
-            
-            # Longshot optional
-            if ($relativePath -like "BepInEx\plugins\BnlPlugins.Longshot*" -and -not $chkLongshot.Checked) {
-                $skip = $true
-            }
             
             # Configuration Manager optional
             if ($relativePath -like "BepInEx\plugins\ConfigurationManager*" -and -not $chkCfgManager.Checked) {

@@ -35,7 +35,6 @@ namespace BnlInstaller
         private CheckBox _chkCardTextures = null!;
         private CheckBox _chkBepInEx = null!;
         private CheckBox _chkLauncher = null!;
-        private CheckBox _chkLongshot = null!;
         private CheckBox _chkCfgManager = null!;
         private Label _lblStatus = null!;
         private ProgressBar _progressBar = null!;
@@ -104,21 +103,19 @@ namespace BnlInstaller
             _groupPlugins = new GroupBox
             {
                 Text = "Components to Install",
-                Size = new Size(470, 170),
+                Size = new Size(470, 145),
                 Location = new Point(15, 155)
             };
 
             int y = 22;
             _chkCardTextures = MakeCheckBox("Card Textures (custom perk images) - REQUIRED", y, true, false); y += 25;
             _chkBepInEx = MakeCheckBox("BepInEx (mod loader) - REQUIRED", y, true, false); y += 25;
-            _chkLauncher = MakeCheckBox("Community Launcher (server connect + EAC bypass)", y, true, true); y += 25;
-            _chkLongshot = MakeCheckBox("Longshot (recoil-free sniper mod)", y, false, true); y += 25;
+            _chkLauncher = MakeCheckBox("Community Launcher (server connect + EAC bypass) - REQUIRED", y, true, false); y += 25;
             _chkCfgManager = MakeCheckBox("Configuration Manager (in-game settings, press F1)", y, true, true);
 
             _groupPlugins.Controls.Add(_chkCardTextures);
             _groupPlugins.Controls.Add(_chkBepInEx);
             _groupPlugins.Controls.Add(_chkLauncher);
-            _groupPlugins.Controls.Add(_chkLongshot);
             _groupPlugins.Controls.Add(_chkCfgManager);
 
             // Status
@@ -126,7 +123,7 @@ namespace BnlInstaller
             {
                 Text = "",
                 Size = new Size(470, 35),
-                Location = new Point(15, 332)
+                Location = new Point(15, 308)
             };
 
             // Progress
@@ -368,8 +365,6 @@ namespace BnlInstaller
                             continue;
 
                         // Filter optional components
-                        if (relativePath.Contains("BnlPlugins.Longshot") && !_chkLongshot.Checked)
-                            continue;
                         if (relativePath.Contains("ConfigurationManager") && !_chkCfgManager.Checked)
                             continue;
 
