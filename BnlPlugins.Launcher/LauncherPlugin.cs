@@ -46,10 +46,11 @@ namespace BnlPlugins.Launcher
             Log = Logger;
 
             // Unity 5 Mono doesn't negotiate TLS 1.2 by default — required for GitHub API
+            // .NET 3.5 doesn't have the Tls12 enum, so we use the raw integer value (3072 = 0xC00)
             try
             {
                 System.Net.ServicePointManager.SecurityProtocol =
-                    System.Net.SecurityProtocolType.Tls12 | System.Net.SecurityProtocolType.Tls11;
+                    (System.Net.SecurityProtocolType)3072 | (System.Net.SecurityProtocolType)768;
             }
             catch { }
 
