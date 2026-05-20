@@ -2,15 +2,13 @@
 
 BepInEx 5 plugins for Block N Load (Unity 5.1.4). Replaces the old IL-patcher launcher approach with runtime BepInEx/Harmony mods.
 
-> **Status**: Working — connects to community servers, EAC bypassed, FOV mod active.
+> **Status**: Working — connects to community servers, EAC bypassed.
 
 ## Plugins
 
 | Component | Layer | Description |
 |-----------|-------|-------------|
 | `BnlPlugins.Launcher` | Plugin | Harmony launcher parity patches, `servers.txt`, runtime shop image overrides |
-| `BnlPlugins.Fov` | Plugin | Camera FOV, weapon model FOV |
-| `BnlPlugins.Longshot` | Plugin | Runtime Longshot asset override work |
 
 ## How it works
 
@@ -18,7 +16,7 @@ All patches run at runtime through BepInEx/Harmony — **no game files or game a
 
 ```
 Launch → BepInEx preloader
-       → Plugins load (Harmony launcher patches + image overrides + FOV)
+       → Plugins load (Harmony launcher patches + image overrides)
        → Game connects to community server
 ```
 
@@ -73,7 +71,6 @@ Then build:
 
 ```
 dotnet build BnlPlugins.Launcher
-dotnet build BnlPlugins.Fov
 ```
 
 ## Installing BepInEx 5 into Block N Load
@@ -98,7 +95,6 @@ BlockNLoad\
     │   └── BepInEx.cfg      ← Pre-configured for Unity 5
     └── plugins\
         ├── BnlPlugins.Launcher.dll
-        ├── BnlPlugins.Fov.dll
         └── CardTextures\     ← Optional runtime card image overrides
 ```
 
@@ -173,7 +169,6 @@ After running the game with BepInEx installed, check for:
 - **Console window** appearing alongside the game (shows BepInEx loading)
 - **`BepInEx/LogOutput.log`** — should show plugin loading messages
 - **`BepInEx/config/BnlPlugins.Launcher.cfg`** — launcher config file
-- **`BepInEx/config/bnl.community.fov.cfg`** — FOV config file
 - **`BepInEx/plugins/CardTextures/`** — optional card/shop override images
 
 ## Configuration
@@ -182,7 +177,6 @@ After the first run with the plugins loaded, config files are generated at:
 
 ```
 BepInEx/config/BnlPlugins.Launcher.cfg
-BepInEx/config/bnl.community.fov.cfg
 ```
 
-Edit them to change server settings, FOV, weapon model FOV, and ADS sensitivity.
+Edit it to change server settings.
