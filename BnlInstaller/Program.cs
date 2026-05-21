@@ -73,6 +73,8 @@ namespace BnlInstaller
         private Label _lblStatus = null!;
         private ProgressBar _progressBar = null!;
         private Button _btnInstall = null!;
+        private readonly Dictionary<string, CheckBox> _optionalComponentChecks = new Dictionary<string, CheckBox>(StringComparer.OrdinalIgnoreCase);
+        private readonly List<Control> _dynamicComponentControls = new List<Control>();
 
         private readonly string? _initialGamePath;
         private readonly bool _checkUpdatesOnStart;
@@ -101,7 +103,7 @@ namespace BnlInstaller
         private void InitializeComponent()
         {
             Text = "BNL Community Launcher - Installer";
-            ClientSize = new Size(500, 465);
+            ClientSize = new Size(500, 580);
             StartPosition = FormStartPosition.CenterScreen;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
@@ -155,7 +157,7 @@ namespace BnlInstaller
             _groupPlugins = new GroupBox
             {
                 Text = "Components to Install",
-                Size = new Size(470, 170),
+                Size = new Size(470, 285),
                 Location = new Point(15, 155)
             };
 
@@ -177,7 +179,7 @@ namespace BnlInstaller
             {
                 Text = "",
                 Size = new Size(470, 35),
-                Location = new Point(15, 333)
+                Location = new Point(15, 448)
             };
 
             // Progress
@@ -186,7 +188,7 @@ namespace BnlInstaller
                 Style = ProgressBarStyle.Marquee,
                 Visible = false,
                 Size = new Size(470, 20),
-                Location = new Point(15, 395)
+                Location = new Point(15, 510)
             };
 
             // Install button
@@ -194,7 +196,7 @@ namespace BnlInstaller
             {
                 Text = "Install",
                 Size = new Size(110, 32),
-                Location = new Point(195, 423),
+                Location = new Point(195, 538),
                 Font = new Font("Segoe UI", 10f, FontStyle.Bold)
             };
             _btnInstall.Click += BtnInstall_Click;
@@ -228,6 +230,7 @@ namespace BnlInstaller
                 File.Exists(Path.Combine(_initialGamePath, "Win64", "BlockNLoad.exe")))
             {
                 _txtPath.Text = _initialGamePath;
+                TryPopulateOptionalComponentsFromLocalZip();
                 return;
             }
 
@@ -239,6 +242,8 @@ namespace BnlInstaller
                 _txtPath.Text = "";
                 _lblStatus.Text = "Could not auto-detect game folder. Click Browse.";
             }
+
+            TryPopulateOptionalComponentsFromLocalZip();
         }
 
         private static string? FindBnlFolder()
@@ -311,7 +316,10 @@ namespace BnlInstaller
             })
             {
                 if (dialog.ShowDialog() == DialogResult.OK)
+                {
                     _txtPath.Text = dialog.SelectedPath;
+                    TryPopulateOptionalComponentsFromLocalZip();
+                }
             }
         }
 
@@ -400,8 +408,10 @@ namespace BnlInstaller
                 }
 
                 ReleaseManifest manifest = LoadManifestFromZip(tempZip) ?? _defaultManifest;
+                ApplyOptionalComponentsToUi(manifest, gamePath);
                 var selectedComponents = BuildSelectedComponentSet(manifest);
-                if (!PromptForAdditionalOptionalComponents(manifest, selectedComponents, gamePath))
+                if (!UiCoversManifestOptionalComponents(manifest) &&
+                    !PromptForAdditionalOptionalComponents(manifest, selectedComponents, gamePath))
                 {
                     _progressBar.Visible = false;
                     _btnInstall.Enabled = true;
@@ -588,6 +598,7 @@ namespace BnlInstaller
                     return;
                 }
 
+                TryPopulateOptionalComponentsFromLatestRelease();
                 _lblStatus.Text = $"Update available: v{latestVersion} (installed v{currentVersion}). Close the game before installing.";
                 _btnInstall.Text = "Update";
                 Activate();
@@ -943,10 +954,124 @@ namespace BnlInstaller
                         if (_chkLauncher.Checked)
                             selected.Add(component.Id);
                         break;
+                    default:
+                        if (_optionalComponentChecks.TryGetValue(component.Id, out var extraCheck) && extraCheck.Checked)
+                            selected.Add(component.Id);
+                        break;
                 }
             }
 
             return selected;
+        }
+
+        private void TryPopulateOptionalComponentsFromLocalZip()
+        {
+            try
+            {
+                var scriptDir = AppDomain.CurrentDomain.BaseDirectory;
+                var localZip = Directory.GetFiles(scriptDir, "bnl-bepinex-plugins-v*.zip")
+                    .Select(f => new FileInfo(f))
+                    .OrderByDescending(f => f.LastWriteTime)
+                    .FirstOrDefault();
+                if (localZip == null)
+                    return;
+
+                var manifest = LoadManifestFromZip(localZip.FullName);
+                if (manifest == null)
+                    return;
+
+                ApplyOptionalComponentsToUi(manifest, _txtPath.Text.Trim());
+            }
+            catch { }
+        }
+
+        private void TryPopulateOptionalComponentsFromLatestRelease()
+        {
+            try
+            {
+                using (var client = new WebClient())
+                {
+                    client.Headers.Add("User-Agent", "BNL-Installer");
+                    string latestJson = client.DownloadString(
+                        $"https://api.github.com/repos/{RepoOwner}/{RepoName}/releases/latest");
+                    var assetUrl = FindAssetUrl(latestJson, ".zip");
+                    if (string.IsNullOrEmpty(assetUrl))
+                        return;
+
+                    string tempZip = Path.Combine(Path.GetTempPath(), "bnl-manifest-" + Guid.NewGuid().ToString("N") + ".zip");
+                    try
+                    {
+                        client.DownloadFile(assetUrl, tempZip);
+                        var manifest = LoadManifestFromZip(tempZip);
+                        if (manifest != null)
+                            ApplyOptionalComponentsToUi(manifest, _txtPath.Text.Trim());
+                    }
+                    finally
+                    {
+                        try
+                        {
+                            if (File.Exists(tempZip))
+                                File.Delete(tempZip);
+                        }
+                        catch { }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private void ApplyOptionalComponentsToUi(ReleaseManifest manifest, string gamePath)
+        {
+            foreach (var control in _dynamicComponentControls)
+                _groupPlugins.Controls.Remove(control);
+            _dynamicComponentControls.Clear();
+            _optionalComponentChecks.Clear();
+
+            var extraComponents = manifest.Components
+                .Where(c => !c.Required
+                    && !string.Equals(c.Id, "card-textures", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(c.Id, "configuration-manager", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(c.Id, "bepinex-runtime", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(c.Id, "launcher", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            int y = _chkSteamLaunchOption.Bottom + 12;
+            foreach (var component in extraComponents)
+            {
+                bool isInstalled = !string.IsNullOrWhiteSpace(gamePath) && IsComponentInstalled(gamePath, component);
+                var check = new CheckBox
+                {
+                    Text = component.Name + (isInstalled ? " (installed)" : ""),
+                    Checked = isInstalled || component.Default,
+                    Enabled = true,
+                    Size = new Size(450, 20),
+                    Location = new Point(10, y)
+                };
+                var desc = new Label
+                {
+                    Text = component.Description ?? "",
+                    Size = new Size(430, 30),
+                    Location = new Point(28, y + 20)
+                };
+
+                _groupPlugins.Controls.Add(check);
+                _groupPlugins.Controls.Add(desc);
+                _dynamicComponentControls.Add(check);
+                _dynamicComponentControls.Add(desc);
+                _optionalComponentChecks[component.Id] = check;
+                y += 54;
+            }
+        }
+
+        private bool UiCoversManifestOptionalComponents(ReleaseManifest manifest)
+        {
+            return manifest.Components
+                .Where(c => !c.Required
+                    && !string.Equals(c.Id, "card-textures", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(c.Id, "configuration-manager", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(c.Id, "bepinex-runtime", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(c.Id, "launcher", StringComparison.OrdinalIgnoreCase))
+                .All(c => _optionalComponentChecks.ContainsKey(c.Id));
         }
 
         private static bool PromptForAdditionalOptionalComponents(ReleaseManifest manifest, HashSet<string> selectedComponents, string gamePath)
