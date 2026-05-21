@@ -98,6 +98,8 @@ namespace BnlInstaller
         {
             if (_checkUpdatesOnStart)
                 BeginInvoke(new Action(CheckForUpdatesOnly));
+            else
+                BeginInvoke(new Action(TryPopulateOptionalComponentsFromLatestRelease));
         }
 
         private void InitializeComponent()
