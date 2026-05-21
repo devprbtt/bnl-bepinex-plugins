@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net35</TargetFramework>
+    <AssemblyName>BnlPlugins.Fov</AssemblyName>
+    <RootNamespace>BnlPlugins.Fov</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>None</ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>
+    <MSBuildWarningsAsErrors />
+    <NoWarn>MSB3258</NoWarn>
+    <AutoGenerateBindingRedirects>false</AutoGenerateBindingRedirects>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="BepInEx">
+      <HintPath>..\bepinex-dist\BepInEx\core\BepInEx.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="0Harmony20">
+      <HintPath>..\bepinex-dist\BepInEx\core\0Harmony20.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Target Name="AddGameRefsAfterResolve" AfterTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <ReferencePath Include="$(UnityManagedDir)\UnityEngine.dll">
+        <Private>false</Private>
+      </ReferencePath>
+      <ReferencePath Include="$(GameManagedDir)\Assembly-CSharp.dll">
+        <Private>false</Private>
+      </ReferencePath>
+    </ItemGroup>
+  </Target>
+
+</Project>

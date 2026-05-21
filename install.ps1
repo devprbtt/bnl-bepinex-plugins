@@ -371,6 +371,9 @@ $btnInstall.Add_Click({
             $cardDir
         )
         foreach ($d in $dirs) { New-Item -ItemType Directory -Path $d -Force | Out-Null }
+        $currentInstallerPath = ""
+        try { $currentInstallerPath = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName } catch { }
+        $skippedRunningInstallerOverwrite = $false
         
         # Extract from zip
         Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -404,6 +407,11 @@ $btnInstall.Add_Click({
             if (-not (Test-Path $destDir)) {
                 New-Item -ItemType Directory -Path $destDir -Force | Out-Null
             }
+
+            if ($currentInstallerPath -and ($destPath -ieq $currentInstallerPath)) {
+                $skippedRunningInstallerOverwrite = $true
+                continue
+            }
             
             # Extract file
             [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $destPath, $true)
@@ -432,7 +440,9 @@ $btnInstall.Add_Click({
         # Done!
         $result = [System.Windows.Forms.MessageBox]::Show(
             "BNL Community Launcher has been installed!`n`n" +
-            "Launch Block N Load through Steam to play on the community server." + $launchOptionStatus + "`n`n" +
+            "Launch Block N Load through Steam to play on the community server." + $launchOptionStatus +
+            $(if ($skippedRunningInstallerOverwrite) { "`n`nThe local installer file was left unchanged because it is currently running." } else { "" }) +
+            "`n`n" +
             "Open the CardTextures folder now?",
             "Installation Complete", "YesNo", "Information")
         

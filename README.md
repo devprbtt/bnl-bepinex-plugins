@@ -4,6 +4,17 @@ One-click mod for Block N Load that connects you to the community server — no 
 
 > **Status**: Working — community servers online, EAC bypassed.
 
+## Optional Plugins
+
+In addition to the core launcher, the installer offers optional quality-of-life plugins:
+
+| Plugin | Description |
+|--------|-------------|
+| **Crosshair** | Custom crosshair color, size, spread, shape, and ADS visibility. Configure in-game via the Configuration Manager (press **`**). |
+| **FOV / ADS** | Override camera FOV, ADS sensitivity multiplier, and weapon model FOV. |
+
+These are opt-in — uncheck them in the installer if you don't want them.
+
 ## Installation
 
 ### Option 1: Automatic Installer (Recommended)
@@ -66,11 +77,25 @@ You can also change these settings in-game: press **`** to open the Configuratio
 Press **`** in-game to open a settings menu where you can change plugin settings without editing config files:
 
 - Server host and port
-- Any future configurable options
+- Crosshair color, size, spread, shape, and ADS visibility (if Crosshair plugin installed)
+- FOV and ADS sensitivity (if FOV plugin installed)
 
 This is powered by [BepInEx.ConfigurationManager](https://github.com/BepInEx/BepInEx.ConfigurationManager) — included automatically.
 
 The default hotkey is **`**.
+
+## Crosshair Plugin
+
+When installed, the Crosshair plugin lets you customize the in-game crosshair via the Configuration Manager:
+
+- **Color** — separate colors for idle, full-damage range, and below-max range targets. Supports hex input (`#RRGGBBAA`) and preset color buttons.
+- **Brightness** — multiplier applied on top of the color.
+- **Alpha** — overall crosshair transparency.
+- **Size** — scale multiplier for the crosshair widget.
+- **Spread** — multiplier for the bloom/spread angle.
+- **Force Shape** — override the weapon's crosshair type (`Dot`, `Crosshair`, `BrokenCircle`, `Hashed`, `HashedCrosshair`, `Melee`, or `__DEFAULT__` to leave it as-is).
+- **Force Show in ADS** — keep the crosshair visible while aiming down sights.
+- **Hide Crosshair** — hide it entirely.
 
 ## Auto-Updates
 

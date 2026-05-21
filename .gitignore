@@ -7,7 +7,6 @@ tmp_*
 tools/
 bepinex-dist/BepInEx/plugins/
 BnlPlugins.Longshot/
-BnlPlugins.Fov/
 BnlInstaller/bin/
 BnlInstaller/obj/
 release/

@@ -35,6 +35,20 @@ Write-Host "=== Building plugins ==="
 dotnet build "$workspace\BnlPlugins.Launcher\BnlPlugins.Launcher.csproj" -c Release
 if ($LASTEXITCODE -ne 0) { throw "Launcher build failed" }
 
+$fovProject = "$workspace\BnlPlugins.Fov\BnlPlugins.Fov.csproj"
+$fovDll = "$workspace\BnlPlugins.Fov\bin\Release\net35\BnlPlugins.Fov.dll"
+if (Test-Path $fovProject) {
+    dotnet build $fovProject -c Release
+    if ($LASTEXITCODE -ne 0) { throw "FOV plugin build failed" }
+}
+
+$crosshairProject = "$workspace\BnlPlugins.Crosshair\BnlPlugins.Crosshair.csproj"
+$crosshairDll = "$workspace\BnlPlugins.Crosshair\bin\Release\net35\BnlPlugins.Crosshair.dll"
+if (Test-Path $crosshairProject) {
+    dotnet build $crosshairProject -c Release
+    if ($LASTEXITCODE -ne 0) { throw "Crosshair plugin build failed" }
+}
+
 # Build installer exe
 dotnet build "$workspace\BnlInstaller\BnlInstaller.csproj" -c Release
 if ($LASTEXITCODE -ne 0) { throw "Installer build failed" }
@@ -71,6 +85,12 @@ Copy-Item "$workspace\bepinex-dist\BepInEx\config\com.bepis.bepinex.configuratio
 # Copy built plugin DLL
 Copy-Item "$workspace\BnlPlugins.Launcher\bin\Release\net35\BnlPlugins.Launcher.dll" (Join-Path $staging "Win64\BepInEx\plugins")
 Copy-Item "$workspace\BnlInstaller\bin\Release\net472\BNL-Installer.exe" (Join-Path $staging "Win64\BepInEx\plugins\Launcher\BNL-Installer.exe")
+if (Test-Path $fovDll) {
+    Copy-Item $fovDll (Join-Path $staging "Win64\BepInEx\plugins")
+}
+if (Test-Path $crosshairDll) {
+    Copy-Item $crosshairDll (Join-Path $staging "Win64\BepInEx\plugins")
+}
 
 # Copy Configuration Manager (in-game settings menu, F1)
 $cfgManDir = "$workspace\bepinex-dist\BepInEx\plugins\ConfigurationManager"
@@ -85,59 +105,87 @@ Write-Host "  Version: $Version"
 
 # Write release manifest (used by the installer to present optional components)
 $manifestPath = Join-Path $staging "Win64\BepInEx\plugins\Launcher\release-manifest.json"
+$manifestComponents = @(
+    [ordered]@{
+        id = "bepinex-runtime"
+        name = "BepInEx Runtime"
+        description = "Doorstop bootstrap and BepInEx core files."
+        required = $true
+        default = $true
+        paths = @(
+            ".doorstop_version",
+            "changelog.txt",
+            "doorstop_config.ini",
+            "winhttp.dll",
+            "BepInEx/core/",
+            "BepInEx/config/BepInEx.cfg"
+        )
+    },
+    [ordered]@{
+        id = "launcher"
+        name = "Community Launcher"
+        description = "Server patches, installer helper, and version metadata."
+        required = $true
+        default = $true
+        paths = @(
+            "BepInEx/plugins/BnlPlugins.Launcher.dll",
+            "BepInEx/plugins/Launcher/BNL-Installer.exe",
+            "BepInEx/plugins/Launcher/version.txt",
+            "BepInEx/plugins/Launcher/release-manifest.json"
+        )
+    },
+    [ordered]@{
+        id = "card-textures"
+        name = "Card Texture Overrides"
+        description = "Bundled custom card images."
+        required = $false
+        default = $true
+        paths = @(
+            "BepInEx/plugins/Launcher/CardTextures/"
+        )
+    },
+    [ordered]@{
+        id = "configuration-manager"
+        name = "Configuration Manager"
+        description = "In-game settings UI."
+        required = $false
+        default = $true
+        paths = @(
+            "BepInEx/plugins/ConfigurationManager/",
+            "BepInEx/config/com.bepis.bepinex.configurationmanager.cfg"
+        )
+    }
+)
+
+if (Test-Path $fovDll) {
+    $manifestComponents += [ordered]@{
+        id = "fov"
+        name = "FOV / ADS"
+        description = "Forced camera FOV, ADS sensitivity multiplier, and weapon model FOV."
+        required = $false
+        default = $false
+        paths = @(
+            "BepInEx/plugins/BnlPlugins.Fov.dll"
+        )
+    }
+}
+
+if (Test-Path $crosshairDll) {
+    $manifestComponents += [ordered]@{
+        id = "crosshair"
+        name = "Crosshair"
+        description = "Crosshair color, size, spread, visibility, and forced-shape overrides."
+        required = $false
+        default = $false
+        paths = @(
+            "BepInEx/plugins/BnlPlugins.Crosshair.dll"
+        )
+    }
+}
+
 $manifest = [ordered]@{
     version = $Version
-    components = @(
-        [ordered]@{
-            id = "bepinex-runtime"
-            name = "BepInEx Runtime"
-            description = "Doorstop bootstrap and BepInEx core files."
-            required = $true
-            default = $true
-            paths = @(
-                ".doorstop_version",
-                "changelog.txt",
-                "doorstop_config.ini",
-                "winhttp.dll",
-                "BepInEx/core/",
-                "BepInEx/config/BepInEx.cfg"
-            )
-        },
-        [ordered]@{
-            id = "launcher"
-            name = "Community Launcher"
-            description = "Server patches, installer helper, and version metadata."
-            required = $true
-            default = $true
-            paths = @(
-                "BepInEx/plugins/BnlPlugins.Launcher.dll",
-                "BepInEx/plugins/Launcher/BNL-Installer.exe",
-                "BepInEx/plugins/Launcher/version.txt",
-                "BepInEx/plugins/Launcher/release-manifest.json"
-            )
-        },
-        [ordered]@{
-            id = "card-textures"
-            name = "Card Texture Overrides"
-            description = "Bundled custom card images."
-            required = $false
-            default = $true
-            paths = @(
-                "BepInEx/plugins/Launcher/CardTextures/"
-            )
-        },
-        [ordered]@{
-            id = "configuration-manager"
-            name = "Configuration Manager"
-            description = "In-game settings UI."
-            required = $false
-            default = $true
-            paths = @(
-                "BepInEx/plugins/ConfigurationManager/",
-                "BepInEx/config/com.bepis.bepinex.configurationmanager.cfg"
-            )
-        }
-    )
+    components = $manifestComponents
 }
 $manifest | ConvertTo-Json -Depth 5 | Set-Content $manifestPath -Encoding utf8
 

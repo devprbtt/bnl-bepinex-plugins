@@ -7,6 +7,7 @@ using System.Linq;
 using System.Net;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
+using System.Text;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
@@ -416,6 +417,9 @@ namespace BnlInstaller
                 Directory.CreateDirectory(Path.Combine(win64Dir, "BepInEx", "config"));
                 Directory.CreateDirectory(pluginsDir);
                 Directory.CreateDirectory(cardDir);
+                string currentInstallerPath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? string.Empty;
+                string? pendingInstallerTempPath = null;
+                string? pendingInstallerTargetPath = null;
 
                 using (var zip = ZipFile.OpenRead(tempZip))
                 {
@@ -438,23 +442,47 @@ namespace BnlInstaller
                         if (destDir != null)
                             Directory.CreateDirectory(destDir);
 
+                        if (!string.IsNullOrEmpty(currentInstallerPath) &&
+                            string.Equals(destPath, currentInstallerPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            pendingInstallerTargetPath = destPath;
+                            pendingInstallerTempPath = Path.Combine(
+                                Path.GetDirectoryName(destPath) ?? win64Dir,
+                                "BNL-Installer.next.exe");
+                            entry.ExtractToFile(pendingInstallerTempPath, true);
+                            continue;
+                        }
+
                         entry.ExtractToFile(destPath, true);
                     }
+                }
+
+                bool scheduledInstallerSelfUpdate = false;
+                if (!string.IsNullOrEmpty(pendingInstallerTempPath) &&
+                    !string.IsNullOrEmpty(pendingInstallerTargetPath) &&
+                    File.Exists(pendingInstallerTempPath))
+                {
+                    ScheduleInstallerSelfReplace(
+                        pendingInstallerTempPath!,
+                        pendingInstallerTargetPath!);
+                    scheduledInstallerSelfUpdate = true;
                 }
 
                 string launchOptionStatus = "";
                 if (_chkSteamLaunchOption.Checked)
                 {
                     string launchOptions = "\"" + Path.Combine(gamePath, "Win64", "BlockNLoad.exe") + "\" %COMMAND%";
-                    int updatedConfigs = SetSteamLaunchOptionsForBlockNLoad(launchOptions);
-                    if (updatedConfigs <= 0)
+                    LaunchOptionUpdateResult launchOptionResult = SetSteamLaunchOptionsForBlockNLoad(launchOptions);
+                    if (!launchOptionResult.FoundAny)
                     {
                         throw new Exception(
                             "The mod files were installed, but Steam launch options could not be updated automatically.\n\n" +
                             "Make sure Steam has been opened at least once for this user and Block N Load has a localconfig.vdf entry.");
                     }
 
-                    launchOptionStatus = "\n\nSteam launch options updated for " + updatedConfigs + " Steam user configuration(s).";
+                    launchOptionStatus = launchOptionResult.UpdatedCount > 0
+                        ? "\n\nSteam launch options updated for " + launchOptionResult.UpdatedCount + " Steam user configuration(s)."
+                        : "\n\nSteam launch options were already set correctly.";
                 }
 
                 // Cleanup temp
@@ -469,7 +497,9 @@ namespace BnlInstaller
                 var result = MessageBox.Show(
                     "BNL Community Launcher has been installed!\n\n" +
                     "Launch Block N Load through Steam to play on the community server." +
-                    launchOptionStatus + "\n\n" +
+                    launchOptionStatus +
+                    (scheduledInstallerSelfUpdate ? "\n\nThe local installer will replace itself after this window closes." : "") +
+                    "\n\n" +
                     "Open the CardTextures folder now?",
                     "Installation Complete", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
 
@@ -651,32 +681,34 @@ namespace BnlInstaller
             return null;
         }
 
-        private static int SetSteamLaunchOptionsForBlockNLoad(string launchOptions)
+        private static LaunchOptionUpdateResult SetSteamLaunchOptionsForBlockNLoad(string launchOptions)
         {
             string? steamPath = FindSteamPath();
             if (string.IsNullOrWhiteSpace(steamPath))
-                return 0;
+                return new LaunchOptionUpdateResult();
 
             string userdataDir = Path.Combine(steamPath, "userdata");
             if (!Directory.Exists(userdataDir))
-                return 0;
+                return new LaunchOptionUpdateResult();
 
-            int updatedCount = 0;
+            var result = new LaunchOptionUpdateResult();
             foreach (string localConfigPath in Directory.EnumerateFiles(userdataDir, "localconfig.vdf", SearchOption.AllDirectories))
             {
                 try
                 {
-                    if (TryUpdateSteamLocalConfig(localConfigPath, launchOptions))
-                        updatedCount++;
+                    var fileResult = TryUpdateSteamLocalConfig(localConfigPath, launchOptions);
+                    result.FoundAny |= fileResult.FoundAny;
+                    result.UpdatedCount += fileResult.UpdatedCount;
                 }
                 catch { }
             }
 
-            return updatedCount;
+            return result;
         }
 
-        private static bool TryUpdateSteamLocalConfig(string localConfigPath, string launchOptions)
+        private static LaunchOptionUpdateResult TryUpdateSteamLocalConfig(string localConfigPath, string launchOptions)
         {
+            var result = new LaunchOptionUpdateResult();
             var lines = File.ReadAllLines(localConfigPath).ToList();
             int appLine = -1;
 
@@ -697,14 +729,16 @@ namespace BnlInstaller
             }
 
             if (appLine < 0)
-                return false;
+                return result;
+
+            result.FoundAny = true;
 
             int openBraceLine = appLine + 1;
             while (openBraceLine < lines.Count && lines[openBraceLine].Trim() != "{")
                 openBraceLine++;
 
             if (openBraceLine >= lines.Count)
-                return false;
+                return result;
 
             int depth = 0;
             int closeBraceLine = -1;
@@ -725,7 +759,7 @@ namespace BnlInstaller
             }
 
             if (closeBraceLine < 0)
-                return false;
+                return result;
 
             string launchLine = "\t\t\t\t\t\"LaunchOptions\"\t\t\"" + EscapeVdfString(launchOptions) + "\"";
 
@@ -734,17 +768,19 @@ namespace BnlInstaller
                 if (lines[i].Contains("\"LaunchOptions\""))
                 {
                     if (string.Equals(lines[i].Trim(), launchLine.Trim(), StringComparison.Ordinal))
-                        return false;
+                        return result;
 
                     lines[i] = launchLine;
                     File.WriteAllLines(localConfigPath, lines);
-                    return true;
+                    result.UpdatedCount = 1;
+                    return result;
                 }
             }
 
             lines.Insert(closeBraceLine, launchLine);
             File.WriteAllLines(localConfigPath, lines);
-            return true;
+            result.UpdatedCount = 1;
+            return result;
         }
 
         private static string EscapeVdfString(string value)
@@ -752,6 +788,30 @@ namespace BnlInstaller
             return value
                 .Replace("\\", "\\\\")
                 .Replace("\"", "\\\"");
+        }
+
+        private static void ScheduleInstallerSelfReplace(string replacementPath, string targetPath)
+        {
+            string scriptPath = Path.Combine(Path.GetTempPath(), "bnl-installer-self-update-" + Guid.NewGuid().ToString("N") + ".cmd");
+            string script =
+                "@echo off\r\n" +
+                "setlocal\r\n" +
+                ":waitloop\r\n" +
+                "ping 127.0.0.1 -n 2 >nul\r\n" +
+                "move /Y \"" + replacementPath + "\" \"" + targetPath + "\" >nul 2>nul\r\n" +
+                "if errorlevel 1 goto waitloop\r\n" +
+                "del \"%~f0\" >nul 2>nul\r\n";
+
+            File.WriteAllText(scriptPath, script, Encoding.ASCII);
+
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = "/c \"" + scriptPath + "\"",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden
+            });
         }
 
         private static ReleaseManifest BuildDefaultManifest()
@@ -1080,5 +1140,11 @@ namespace BnlInstaller
 
         [DataMember(Name = "paths")]
         public List<string> Paths { get; set; } = new List<string>();
+    }
+
+    public struct LaunchOptionUpdateResult
+    {
+        public bool FoundAny { get; set; }
+        public int UpdatedCount { get; set; }
     }
 }
