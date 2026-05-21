@@ -83,6 +83,64 @@ if (Test-Path $cfgManDir) {
 $Version | Out-File -FilePath (Join-Path $staging "Win64\BepInEx\plugins\Launcher\version.txt") -Encoding ascii -NoNewline
 Write-Host "  Version: $Version"
 
+# Write release manifest (used by the installer to present optional components)
+$manifestPath = Join-Path $staging "Win64\BepInEx\plugins\Launcher\release-manifest.json"
+$manifest = [ordered]@{
+    version = $Version
+    components = @(
+        [ordered]@{
+            id = "bepinex-runtime"
+            name = "BepInEx Runtime"
+            description = "Doorstop bootstrap and BepInEx core files."
+            required = $true
+            default = $true
+            paths = @(
+                ".doorstop_version",
+                "changelog.txt",
+                "doorstop_config.ini",
+                "winhttp.dll",
+                "BepInEx/core/",
+                "BepInEx/config/BepInEx.cfg"
+            )
+        },
+        [ordered]@{
+            id = "launcher"
+            name = "Community Launcher"
+            description = "Server patches, installer helper, and version metadata."
+            required = $true
+            default = $true
+            paths = @(
+                "BepInEx/plugins/BnlPlugins.Launcher.dll",
+                "BepInEx/plugins/Launcher/BNL-Installer.exe",
+                "BepInEx/plugins/Launcher/version.txt",
+                "BepInEx/plugins/Launcher/release-manifest.json"
+            )
+        },
+        [ordered]@{
+            id = "card-textures"
+            name = "Card Texture Overrides"
+            description = "Bundled custom card images."
+            required = $false
+            default = $true
+            paths = @(
+                "BepInEx/plugins/Launcher/CardTextures/"
+            )
+        },
+        [ordered]@{
+            id = "configuration-manager"
+            name = "Configuration Manager"
+            description = "In-game settings UI."
+            required = $false
+            default = $true
+            paths = @(
+                "BepInEx/plugins/ConfigurationManager/",
+                "BepInEx/config/com.bepis.bepinex.configurationmanager.cfg"
+            )
+        }
+    )
+}
+$manifest | ConvertTo-Json -Depth 5 | Set-Content $manifestPath -Encoding utf8
+
 # Copy card override images from workspace dist only.
 # Releases must be reproducible and must not pick up personal overrides
 # from the local game install.

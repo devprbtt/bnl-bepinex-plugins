@@ -12,6 +12,7 @@ One-click mod for Block N Load that connects you to the community server — no 
 2. **Double-click** to run — no dependencies, works on any Windows 10/11 PC
 3. The installer auto-detects your Block N Load folder, lets you pick components, and installs everything
 4. Optional: enable the Steam launch-options checkbox if you want the installer to write the direct `BlockNLoad.exe` launch option for your Steam user
+5. If a release includes extra optional plugins, the installer will show them before extraction so you can skip anything you do not want
 
 ### Option 2: Manual Install
 

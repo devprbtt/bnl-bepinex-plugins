@@ -5,6 +5,8 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Net;
+using System.Runtime.Serialization;
+using System.Runtime.Serialization.Json;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
@@ -52,6 +54,7 @@ namespace BnlInstaller
 
     public class MainForm : Form
     {
+        private const string ManifestEntryPath = "BepInEx/plugins/Launcher/release-manifest.json";
         private const string RepoOwner = "devprbtt";
         private const string RepoName = "bnl-bepinex-plugins";
 
@@ -74,6 +77,7 @@ namespace BnlInstaller
         private readonly bool _checkUpdatesOnStart;
         private readonly bool _silentNoUpdate;
         private readonly string? _currentVersionOverride;
+        private readonly ReleaseManifest _defaultManifest;
 
         public MainForm(string? initialGamePath, bool checkUpdatesOnStart, bool silentNoUpdate, string? currentVersionOverride)
         {
@@ -81,6 +85,7 @@ namespace BnlInstaller
             _checkUpdatesOnStart = checkUpdatesOnStart;
             _silentNoUpdate = silentNoUpdate;
             _currentVersionOverride = currentVersionOverride;
+            _defaultManifest = BuildDefaultManifest();
             InitializeComponent();
             AutoDetectGameFolder();
             Shown += MainForm_Shown;
@@ -154,7 +159,7 @@ namespace BnlInstaller
             };
 
             int y = 22;
-            _chkCardTextures = MakeCheckBox("Card Textures (custom perk images) - REQUIRED", y, true, false); y += 25;
+            _chkCardTextures = MakeCheckBox("Card Textures (custom perk images, optional)", y, true, true); y += 25;
             _chkBepInEx = MakeCheckBox("BepInEx (mod loader) - REQUIRED", y, true, false); y += 25;
             _chkLauncher = MakeCheckBox("Community Launcher (server connect + EAC bypass) - REQUIRED", y, true, false); y += 25;
             _chkCfgManager = MakeCheckBox("Configuration Manager (in-game settings, press `)", y, true, true); y += 25;
@@ -393,6 +398,16 @@ namespace BnlInstaller
                     throw new Exception("Steam is currently running.\n\nClose Steam first if you want the installer to update Block N Load launch options.");
                 }
 
+                ReleaseManifest manifest = LoadManifestFromZip(tempZip) ?? _defaultManifest;
+                var selectedComponents = BuildSelectedComponentSet(manifest);
+                if (!PromptForAdditionalOptionalComponents(manifest, selectedComponents, gamePath))
+                {
+                    _progressBar.Visible = false;
+                    _btnInstall.Enabled = true;
+                    _lblStatus.Text = "";
+                    return;
+                }
+
                 var win64Dir = Path.Combine(gamePath, "Win64");
                 var pluginsDir = Path.Combine(win64Dir, "BepInEx", "plugins");
                 var cardDir = Path.Combine(pluginsDir, "Launcher", "CardTextures");
@@ -415,8 +430,7 @@ namespace BnlInstaller
                             relativePath.EndsWith("/") || relativePath.EndsWith("\\"))
                             continue;
 
-                        // Filter optional components
-                        if (relativePath.Contains("ConfigurationManager") && !_chkCfgManager.Checked)
+                        if (!IsPathSelectedByManifest(relativePath, selectedComponents, manifest))
                             continue;
 
                         var destPath = Path.Combine(win64Dir, relativePath);
@@ -740,6 +754,277 @@ namespace BnlInstaller
                 .Replace("\"", "\\\"");
         }
 
+        private static ReleaseManifest BuildDefaultManifest()
+        {
+            return new ReleaseManifest
+            {
+                Version = "0.0.0",
+                Components = new List<ReleaseComponent>
+                {
+                    new ReleaseComponent
+                    {
+                        Id = "bepinex-runtime",
+                        Name = "BepInEx Runtime",
+                        Description = "Doorstop bootstrap and BepInEx core files.",
+                        Required = true,
+                        Default = true,
+                        Paths = new List<string>
+                        {
+                            ".doorstop_version",
+                            "changelog.txt",
+                            "doorstop_config.ini",
+                            "winhttp.dll",
+                            "BepInEx/core/",
+                            "BepInEx/config/BepInEx.cfg"
+                        }
+                    },
+                    new ReleaseComponent
+                    {
+                        Id = "launcher",
+                        Name = "Community Launcher",
+                        Description = "Server patches, installer helper, and version metadata.",
+                        Required = true,
+                        Default = true,
+                        Paths = new List<string>
+                        {
+                            "BepInEx/plugins/BnlPlugins.Launcher.dll",
+                            "BepInEx/plugins/Launcher/BNL-Installer.exe",
+                            "BepInEx/plugins/Launcher/version.txt",
+                            ManifestEntryPath
+                        }
+                    },
+                    new ReleaseComponent
+                    {
+                        Id = "card-textures",
+                        Name = "Card Texture Overrides",
+                        Description = "Bundled custom card images.",
+                        Required = false,
+                        Default = true,
+                        Paths = new List<string>
+                        {
+                            "BepInEx/plugins/Launcher/CardTextures/"
+                        }
+                    },
+                    new ReleaseComponent
+                    {
+                        Id = "configuration-manager",
+                        Name = "Configuration Manager",
+                        Description = "In-game settings UI.",
+                        Required = false,
+                        Default = true,
+                        Paths = new List<string>
+                        {
+                            "BepInEx/plugins/ConfigurationManager/",
+                            "BepInEx/config/com.bepis.bepinex.configurationmanager.cfg"
+                        }
+                    }
+                }
+            };
+        }
+
+        private static ReleaseManifest? LoadManifestFromZip(string zipPath)
+        {
+            try
+            {
+                using (var zip = ZipFile.OpenRead(zipPath))
+                {
+                    var entry = zip.Entries.FirstOrDefault(e =>
+                        string.Equals(NormalizeZipRelativePath(e.FullName), ManifestEntryPath, StringComparison.OrdinalIgnoreCase));
+                    if (entry == null)
+                        return null;
+
+                    using (var stream = entry.Open())
+                    {
+                        var serializer = new DataContractJsonSerializer(typeof(ReleaseManifest));
+                        return serializer.ReadObject(stream) as ReleaseManifest;
+                    }
+                }
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static string NormalizeZipRelativePath(string entryPath)
+        {
+            string path = entryPath.Replace('\\', '/');
+            if (path.StartsWith("Win64/", StringComparison.OrdinalIgnoreCase))
+                path = path.Substring("Win64/".Length);
+            return path;
+        }
+
+        private HashSet<string> BuildSelectedComponentSet(ReleaseManifest manifest)
+        {
+            var selected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var component in manifest.Components)
+            {
+                if (component.Required)
+                {
+                    selected.Add(component.Id);
+                    continue;
+                }
+
+                switch (component.Id)
+                {
+                    case "card-textures":
+                        if (_chkCardTextures.Checked)
+                            selected.Add(component.Id);
+                        break;
+                    case "configuration-manager":
+                        if (_chkCfgManager.Checked)
+                            selected.Add(component.Id);
+                        break;
+                    case "bepinex-runtime":
+                        if (_chkBepInEx.Checked)
+                            selected.Add(component.Id);
+                        break;
+                    case "launcher":
+                        if (_chkLauncher.Checked)
+                            selected.Add(component.Id);
+                        break;
+                }
+            }
+
+            return selected;
+        }
+
+        private static bool PromptForAdditionalOptionalComponents(ReleaseManifest manifest, HashSet<string> selectedComponents, string gamePath)
+        {
+            var extraComponents = manifest.Components
+                .Where(c => !c.Required
+                    && !string.Equals(c.Id, "card-textures", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(c.Id, "configuration-manager", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(c.Id, "bepinex-runtime", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(c.Id, "launcher", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (extraComponents.Count == 0)
+                return true;
+
+            using (var form = new Form())
+            using (var panel = new FlowLayoutPanel())
+            using (var okButton = new Button())
+            using (var cancelButton = new Button())
+            {
+                form.Text = "Optional Components";
+                form.ClientSize = new Size(540, 360);
+                form.StartPosition = FormStartPosition.CenterParent;
+                form.FormBorderStyle = FormBorderStyle.FixedDialog;
+                form.MaximizeBox = false;
+                form.MinimizeBox = false;
+                form.Font = new Font("Segoe UI", 9f);
+
+                form.Controls.Add(new Label
+                {
+                    Text = "This update includes optional components. Choose what to install.",
+                    Location = new Point(15, 12),
+                    Size = new Size(500, 34)
+                });
+
+                panel.Location = new Point(15, 52);
+                panel.Size = new Size(500, 230);
+                panel.FlowDirection = FlowDirection.TopDown;
+                panel.WrapContents = false;
+                panel.AutoScroll = true;
+                form.Controls.Add(panel);
+
+                var checkboxes = new Dictionary<string, CheckBox>(StringComparer.OrdinalIgnoreCase);
+                foreach (var component in extraComponents)
+                {
+                    bool isInstalled = IsComponentInstalled(gamePath, component);
+                    var check = new CheckBox
+                    {
+                        Text = component.Name + (isInstalled ? " (installed)" : ""),
+                        Checked = isInstalled || component.Default,
+                        Width = 470,
+                        Margin = new Padding(3, 3, 3, 0)
+                    };
+                    panel.Controls.Add(check);
+                    panel.Controls.Add(new Label
+                    {
+                        Text = component.Description ?? "",
+                        Width = 470,
+                        Height = 32,
+                        Margin = new Padding(24, 0, 3, 8)
+                    });
+                    checkboxes[component.Id] = check;
+                }
+
+                okButton.Text = "Continue";
+                okButton.Size = new Size(110, 30);
+                okButton.Location = new Point(290, 300);
+                okButton.DialogResult = DialogResult.OK;
+                form.Controls.Add(okButton);
+
+                cancelButton.Text = "Cancel";
+                cancelButton.Size = new Size(110, 30);
+                cancelButton.Location = new Point(405, 300);
+                cancelButton.DialogResult = DialogResult.Cancel;
+                form.Controls.Add(cancelButton);
+
+                form.AcceptButton = okButton;
+                form.CancelButton = cancelButton;
+
+                if (form.ShowDialog() != DialogResult.OK)
+                    return false;
+
+                foreach (var component in extraComponents)
+                {
+                    if (checkboxes.TryGetValue(component.Id, out var cb) && cb.Checked)
+                        selectedComponents.Add(component.Id);
+                }
+
+                return true;
+            }
+        }
+
+        private static bool IsPathSelectedByManifest(string relativePath, HashSet<string> selectedComponents, ReleaseManifest manifest)
+        {
+            string normalized = relativePath.Replace('\\', '/');
+            foreach (var component in manifest.Components)
+            {
+                if (!selectedComponents.Contains(component.Id))
+                    continue;
+
+                foreach (string componentPath in component.Paths)
+                {
+                    string expected = componentPath.Replace('\\', '/').TrimStart('/');
+                    if (expected.EndsWith("/"))
+                    {
+                        if (normalized.StartsWith(expected, StringComparison.OrdinalIgnoreCase))
+                            return true;
+                    }
+                    else if (string.Equals(normalized, expected, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private static bool IsComponentInstalled(string gamePath, ReleaseComponent component)
+        {
+            foreach (string componentPath in component.Paths)
+            {
+                string normalized = componentPath.Replace('/', Path.DirectorySeparatorChar).TrimStart(Path.DirectorySeparatorChar);
+                string fullPath = Path.Combine(Path.Combine(gamePath, "Win64"), normalized);
+                if (componentPath.EndsWith("/"))
+                {
+                    if (Directory.Exists(fullPath.TrimEnd(Path.DirectorySeparatorChar)))
+                        return true;
+                }
+                else if (File.Exists(fullPath) || Directory.Exists(fullPath))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         private static bool IsNewerVersion(string latest, string current)
         {
             try
@@ -763,5 +1048,37 @@ namespace BnlInstaller
                 return string.Compare(latest, current, StringComparison.OrdinalIgnoreCase) > 0;
             }
         }
+    }
+
+    [DataContract]
+    public class ReleaseManifest
+    {
+        [DataMember(Name = "version")]
+        public string Version { get; set; } = string.Empty;
+
+        [DataMember(Name = "components")]
+        public List<ReleaseComponent> Components { get; set; } = new List<ReleaseComponent>();
+    }
+
+    [DataContract]
+    public class ReleaseComponent
+    {
+        [DataMember(Name = "id")]
+        public string Id { get; set; } = string.Empty;
+
+        [DataMember(Name = "name")]
+        public string Name { get; set; } = string.Empty;
+
+        [DataMember(Name = "description")]
+        public string Description { get; set; } = string.Empty;
+
+        [DataMember(Name = "required")]
+        public bool Required { get; set; }
+
+        [DataMember(Name = "default")]
+        public bool Default { get; set; }
+
+        [DataMember(Name = "paths")]
+        public List<string> Paths { get; set; } = new List<string>();
     }
 }
