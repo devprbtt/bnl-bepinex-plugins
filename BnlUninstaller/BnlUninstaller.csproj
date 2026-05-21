@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net472</TargetFramework>
+    <AssemblyName>BNL-Uninstaller</AssemblyName>
+    <RootNamespace>BnlUninstaller</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationIcon>..\BnlInstaller\app.ico</ApplicationIcon>
+  </PropertyGroup>
+
+</Project>

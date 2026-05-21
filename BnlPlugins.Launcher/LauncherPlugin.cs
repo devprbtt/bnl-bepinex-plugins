@@ -21,10 +21,10 @@ namespace BnlPlugins.Launcher
     ///   - EACToolInitializer.Initialize()/KickPlayer()/leave hooks → disabled
     ///   - Writes servers.txt for community server selection
     /// </summary>
-    [BepInPlugin("bnl.community.launcher", "BNL Launcher Patches", "1.2.0")]
+    [BepInPlugin("bnl.community.launcher", "BNL Launcher Patches", "1.2.1")]
     public class LauncherPlugin : BaseUnityPlugin
     {
-        internal const string CurrentVersion = "1.2.0";
+        internal const string CurrentVersion = "1.2.1";
         private const string GitHubRepo = "devprbtt/bnl-bepinex-plugins";
 
         internal static string DefaultServerHost = "v310.blocknload.pauldh.nl";
@@ -40,6 +40,7 @@ namespace BnlPlugins.Launcher
         private static string _versionFilePath = string.Empty;
         private static string _lastCheckFilePath = string.Empty;
         private static bool _checkRequested;
+        private static int _lastManualCheckFrame = -1;
 
         private void Awake()
         {
@@ -67,6 +68,41 @@ namespace BnlPlugins.Launcher
             Logger.Log(BepInEx.Logging.LogLevel.Info,
                 string.Format("[BNL Launcher] Ready v{0}. Server: {1}:{2}",
                     CurrentVersion, DefaultServerHost, DefaultServerPort));
+        }
+
+        private void Update()
+        {
+            if (Input.GetKeyDown(KeyCode.F5) && !_checkRequested)
+            {
+                QueueManualUpdateCheck("Update");
+            }
+
+            if (!_checkRequested)
+                return;
+
+            _checkRequested = false;
+            StartCoroutine(CheckForUpdatesCoroutine(true));
+        }
+
+        private void OnGUI()
+        {
+            Event current = Event.current;
+            if (current != null && current.type == EventType.KeyDown && current.keyCode == KeyCode.F5 && !_checkRequested)
+            {
+                QueueManualUpdateCheck("OnGUI");
+                current.Use();
+            }
+        }
+
+        private void QueueManualUpdateCheck(string source)
+        {
+            if (_lastManualCheckFrame == Time.frameCount)
+                return;
+
+            _lastManualCheckFrame = Time.frameCount;
+            Logger.Log(BepInEx.Logging.LogLevel.Info,
+                "[BNL Launcher] Manual update check requested (F5) via " + source);
+            _checkRequested = true;
         }
 
         private void LoadConfig()
@@ -248,27 +284,24 @@ namespace BnlPlugins.Launcher
                         Logger.Log(BepInEx.Logging.LogLevel.Warning,
                             "[BNL Launcher] Could not find SteamLogin.Init");
                     }
-                }
 
-                var playerDataType = Type.GetType("PlayerData, Assembly-CSharp");
-
-                // Bulletproof: patch MasterServer getter on PlayerData to always return community server
-                if (playerDataType != null)
-                {
-                    var masterServerGetter = FindInstanceMethod(playerDataType, "get_MasterServer", 0);
-                    if (masterServerGetter != null)
+                    var initFinalizeMethod = steamLoginType.GetMethod("<Init>m__641",
+                        BindingFlags.Static | BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (initFinalizeMethod != null)
                     {
-                        harmony.Patch(masterServerGetter,
-                            postfix: new HarmonyMethod(typeof(LauncherParityPatches).GetMethod("MasterServer_Getter_Postfix")));
+                        harmony.Patch(initFinalizeMethod,
+                            postfix: new HarmonyMethod(typeof(LauncherParityPatches).GetMethod("SteamInitFinalize_Postfix")));
                         Logger.Log(BepInEx.Logging.LogLevel.Info,
-                            "[BNL Launcher] Patched: PlayerData.get_MasterServer → community server override");
+                            "[BNL Launcher] Patched: SteamLogin.<Init>m__641 → late server override");
                     }
                     else
                     {
                         Logger.Log(BepInEx.Logging.LogLevel.Warning,
-                            "[BNL Launcher] Could not find PlayerData.get_MasterServer");
+                            "[BNL Launcher] Could not find SteamLogin.<Init>m__641");
                     }
                 }
+
+                var playerDataType = Type.GetType("PlayerData, Assembly-CSharp");
 
                 if (playerDataType != null)
                 {
@@ -279,6 +312,28 @@ namespace BnlPlugins.Launcher
                             postfix: new HarmonyMethod(typeof(LauncherParityPatches).GetMethod("PlayerDataIsNoob_Postfix")));
                         Logger.Log(BepInEx.Logging.LogLevel.Info,
                             "[BNL Launcher] Patched: PlayerData.IsNoob → false");
+                    }
+                }
+
+                var threadNetworkClientType = Type.GetType("ThreadNetworkClient, Assembly-CSharp");
+                if (threadNetworkClientType != null)
+                {
+                    var connectMethod = threadNetworkClientType.GetMethod("Connect",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                        null,
+                        new[] { typeof(string), typeof(int) },
+                        null);
+                    if (connectMethod != null)
+                    {
+                        harmony.Patch(connectMethod,
+                            prefix: new HarmonyMethod(typeof(LauncherParityPatches).GetMethod("ThreadNetworkClientConnect_Prefix")));
+                        Logger.Log(BepInEx.Logging.LogLevel.Info,
+                            "[BNL Launcher] Patched: ThreadNetworkClient.Connect → master endpoint override");
+                    }
+                    else
+                    {
+                        Logger.Log(BepInEx.Logging.LogLevel.Warning,
+                            "[BNL Launcher] Could not find ThreadNetworkClient.Connect(string,int)");
                     }
                 }
             }
@@ -488,29 +543,45 @@ namespace BnlPlugins.Launcher
             string releaseUrl = null;
             string releaseName = null;
             string releaseBody = null;
-            string zipDownloadUrl = null;
+            string installerDownloadUrl = null;
+            string installedVersion = CurrentVersion;
+            if (File.Exists(_versionFilePath))
+            {
+                try
+                {
+                    string fileVersion = File.ReadAllText(_versionFilePath).Trim();
+                    if (!string.IsNullOrEmpty(fileVersion))
+                        installedVersion = fileVersion;
+                }
+                catch { }
+            }
 
             string apiUrl = "https://api.github.com/repos/" + GitHubRepo + "/releases/latest";
-            string? wwwError = null;
             string json = "";
+            string? fetchError = null;
 
-            // Unity's WWW handles TLS independently of the Mono runtime
-            using (var www = new WWW(apiUrl))
+            Logger.Log(BepInEx.Logging.LogLevel.Info,
+                "[BNL Launcher] Update check backend: PowerShell");
+            Logger.Log(BepInEx.Logging.LogLevel.Info,
+                "[BNL Launcher] Starting update check: " + apiUrl);
+
+            yield return FetchUrlWithPowerShell(apiUrl, result =>
             {
-                while (!www.isDone)
-                    yield return null;
+                json = result;
+            }, error =>
+            {
+                fetchError = error;
+            });
 
-                wwwError = www.error;
-                if (string.IsNullOrEmpty(wwwError))
-                    json = www.text;
-            }
-
-            if (!string.IsNullOrEmpty(wwwError))
+            if (!string.IsNullOrEmpty(fetchError))
             {
                 Logger.Log(BepInEx.Logging.LogLevel.Warning,
-                    "[BNL Launcher] Update check failed: " + wwwError);
+                    "[BNL Launcher] Update check failed: " + fetchError);
                 yield break;
             }
+
+            Logger.Log(BepInEx.Logging.LogLevel.Info,
+                "[BNL Launcher] Update check fetch succeeded. Bytes=" + json.Length);
 
             try
             {
@@ -519,7 +590,7 @@ namespace BnlPlugins.Launcher
                 releaseUrl = ExtractJsonString(json, "html_url");
                 releaseName = ExtractJsonString(json, "name");
                 releaseBody = ExtractJsonBody(json);
-                zipDownloadUrl = FindZipAsset(json);
+                installerDownloadUrl = FindAssetUrl(json, ".exe", "BNL-Installer");
 
                 if (latestVersion != null && latestVersion.StartsWith("v", StringComparison.OrdinalIgnoreCase))
                     latestVersion = latestVersion.Substring(1);
@@ -542,25 +613,24 @@ namespace BnlPlugins.Launcher
                 yield break;
 
             Logger.Log(BepInEx.Logging.LogLevel.Info,
-                "[BNL Launcher] Installed: v" + CurrentVersion + ", Latest: v" + latestVersion);
+                "[BNL Launcher] Installed: v" + installedVersion + ", Latest: v" + latestVersion);
 
-            if (IsNewerVersion(latestVersion, CurrentVersion))
+            if (IsNewerVersion(latestVersion, installedVersion))
             {
                 Logger.Log(BepInEx.Logging.LogLevel.Info,
                     "[BNL Launcher] New version available: v" + latestVersion);
-                ShowUpdateNotification(latestVersion, releaseUrl, releaseName, releaseBody, zipDownloadUrl);
+                ShowUpdateNotification(latestVersion, releaseUrl, installedVersion, releaseName, releaseBody, installerDownloadUrl);
             }
             else if (force)
             {
                 // User manually checked — tell them they're up to date
                 var go = new GameObject("BNL_UpdateNotifier");
                 DontDestroyOnLoad(go);
-                go.AddComponent<UpdateNotifier>().InitializeUpToDate(CurrentVersion);
-            }
+            go.AddComponent<UpdateNotifier>().InitializeUpToDate(CurrentVersion);
+        }
         }
 
-        /// <summary>Find the .zip asset browser_download_url from the GitHub release JSON.</summary>
-        private static string? FindZipAsset(string json)
+        private static string? FindAssetUrl(string json, string requiredExtension, string requiredNamePart = "")
         {
             int assetsIdx = json.IndexOf("\"assets\":[", StringComparison.Ordinal);
             if (assetsIdx < 0) return null;
@@ -576,7 +646,9 @@ namespace BnlPlugins.Launcher
                 if (urlEnd < 0) return null;
 
                 string candidate = json.Substring(urlIdx, urlEnd - urlIdx);
-                if (candidate.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                if (candidate.EndsWith(requiredExtension, StringComparison.OrdinalIgnoreCase) &&
+                    (string.IsNullOrEmpty(requiredNamePart) ||
+                     candidate.IndexOf(requiredNamePart, StringComparison.OrdinalIgnoreCase) >= 0))
                     return candidate;
 
                 searchFrom = urlEnd + 1;
@@ -699,12 +771,89 @@ namespace BnlPlugins.Launcher
         }
 
         private void ShowUpdateNotification(string newVersion, string releaseUrl,
-            string releaseName, string releaseBody, string? zipDownloadUrl)
+            string currentVersion, string releaseName, string releaseBody, string? installerDownloadUrl)
         {
             var go = new GameObject("BNL_UpdateNotifier");
             DontDestroyOnLoad(go);
             go.AddComponent<UpdateNotifier>().Initialize(
-                newVersion, releaseUrl, CurrentVersion, releaseName, releaseBody, zipDownloadUrl);
+                newVersion, releaseUrl, currentVersion, releaseName, releaseBody, installerDownloadUrl);
+        }
+
+        private System.Collections.IEnumerator FetchUrlWithPowerShell(string url, Action<string> onSuccess, Action<string> onError)
+        {
+            string escapedUrl = EscapePowerShellSingleQuoted(url);
+            string tempOutput = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "bnl-update-check.json");
+            string escapedOut = EscapePowerShellSingleQuoted(tempOutput);
+            string command =
+                "$ErrorActionPreference='Stop'; " +
+                "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]3072 -bor [Net.SecurityProtocolType]768 -bor [Net.SecurityProtocolType]192; " +
+                "$ProgressPreference='SilentlyContinue'; " +
+                "Invoke-WebRequest -UseBasicParsing -Headers @{'User-Agent'='BNL-Launcher'} -Uri '" + escapedUrl + "' -OutFile '" + escapedOut + "'";
+
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"" + command + "\"",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+
+            System.Diagnostics.Process? proc = null;
+            try
+            {
+                Logger.Log(BepInEx.Logging.LogLevel.Info,
+                    "[BNL Launcher] Launching PowerShell fetch for " + url);
+                proc = System.Diagnostics.Process.Start(psi);
+            }
+            catch (Exception ex)
+            {
+                onError("could not start PowerShell: " + ex.Message);
+                yield break;
+            }
+
+            if (proc == null)
+            {
+                onError("could not start PowerShell");
+                yield break;
+            }
+
+            while (!proc.HasExited)
+                yield return null;
+
+            string stderr = proc.StandardError.ReadToEnd();
+
+            if (proc.ExitCode != 0)
+            {
+                onError(string.IsNullOrEmpty(stderr) ? "PowerShell exited with code " + proc.ExitCode : stderr.Trim());
+                yield break;
+            }
+
+            string stdout = "";
+            try
+            {
+                if (System.IO.File.Exists(tempOutput))
+                    stdout = System.IO.File.ReadAllText(tempOutput, Encoding.UTF8);
+            }
+            catch (Exception ex)
+            {
+                onError("could not read update response: " + ex.Message);
+                yield break;
+            }
+            finally
+            {
+                try { if (System.IO.File.Exists(tempOutput)) System.IO.File.Delete(tempOutput); } catch { }
+            }
+
+            Logger.Log(BepInEx.Logging.LogLevel.Info,
+                "[BNL Launcher] PowerShell fetch completed successfully");
+            onSuccess(stdout);
+        }
+
+        private static string EscapePowerShellSingleQuoted(string value)
+        {
+            return value.Replace("'", "''");
         }
     }
 
@@ -721,7 +870,7 @@ namespace BnlPlugins.Launcher
         private string _currentVersion = "";
         private string _releaseName = "";
         private string _releaseBody = "";
-        private string? _zipUrl;
+        private string? _installerUrl;
         private bool _visible = true;
         private bool _downloading;
         private bool _upToDate;
@@ -731,14 +880,14 @@ namespace BnlPlugins.Launcher
         private Vector2 _scrollPos;
 
         public void Initialize(string newVersion, string releaseUrl, string currentVersion,
-            string releaseName, string releaseBody, string? zipDownloadUrl)
+            string releaseName, string releaseBody, string? installerDownloadUrl)
         {
             _newVersion = newVersion;
             _releaseUrl = releaseUrl;
             _currentVersion = currentVersion;
             _releaseName = releaseName ?? "";
             _releaseBody = releaseBody ?? "";
-            _zipUrl = zipDownloadUrl;  // unused field - will use later
+            _installerUrl = installerDownloadUrl;
             _windowRect = new Rect(Screen.width / 2f - 230f, Screen.height / 2f - 170f, 460f, 340f);
         }
 
@@ -752,13 +901,6 @@ namespace BnlPlugins.Launcher
 
         private void Update()
         {
-            if (_visible && !_downloading && Input.GetKeyDown(KeyCode.F5))
-            {
-                _visible = false;
-                Destroy(gameObject);
-                LauncherPlugin.RequestUpdateCheck();
-                LauncherPlugin.Log.LogInfo("[BNL Launcher] Manual update check requested (F5)");
-            }
         }
 
         private void OnGUI()
@@ -866,9 +1008,9 @@ namespace BnlPlugins.Launcher
                 GUILayout.BeginHorizontal();
                 GUILayout.FlexibleSpace();
 
-                if (GUILayout.Button("Download && Update", GUILayout.Width(150), GUILayout.Height(34)))
+                if (GUILayout.Button("Open Installer", GUILayout.Width(150), GUILayout.Height(34)))
                 {
-                    StartCoroutine(DownloadAndExtract());
+                    StartCoroutine(DownloadAndLaunchInstaller());
                 }
 
                 GUILayout.Space(12);
@@ -892,50 +1034,37 @@ namespace BnlPlugins.Launcher
             GUI.DragWindow(new Rect(0, 0, 10000, 20));
         }
 
-        private System.Collections.IEnumerator DownloadAndExtract()
+        private System.Collections.IEnumerator DownloadAndLaunchInstaller()
         {
             _downloading = true;
             _downloadStatus = "Preparing download...";
             _errorMessage = "";
             yield return null;
 
-            string? zipUrl = _zipUrl;
-            if (string.IsNullOrEmpty(zipUrl) && !string.IsNullOrEmpty(_releaseUrl))
+            string? installerUrl = _installerUrl;
+            if (string.IsNullOrEmpty(installerUrl) && !string.IsNullOrEmpty(_releaseUrl))
             {
                 string tag = _releaseUrl.Substring(_releaseUrl.LastIndexOf('/') + 1);
-                zipUrl = "https://github.com/" + RepoOwner + "/" + RepoName +
-                    "/releases/download/" + tag + "/bnl-bepinex-plugins-" + _newVersion + ".zip";
+                installerUrl = "https://github.com/" + RepoOwner + "/" + RepoName +
+                    "/releases/download/" + tag + "/BNL-Installer.exe";
             }
 
-            if (string.IsNullOrEmpty(zipUrl))
+            if (string.IsNullOrEmpty(installerUrl))
             {
-                _errorMessage = "Could not find download URL.";
+                _errorMessage = "Could not find installer download URL.";
                 _downloading = false;
                 yield break;
             }
 
-            _downloadStatus = "Downloading update...";
+            _downloadStatus = "Downloading installer...";
             yield return null;
 
-            string tempZip = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "bnl-update.zip");
+            string tempInstaller = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "BNL-Installer.exe");
             string? downloadError = null;
-
-            using (var www = new WWW(zipUrl))
+            yield return DownloadFileWithPowerShell(installerUrl, tempInstaller, error =>
             {
-                while (!www.isDone)
-                    yield return null;
-
-                if (!string.IsNullOrEmpty(www.error))
-                    downloadError = www.error;
-                else
-                {
-                    try
-                    {
-                        System.IO.File.WriteAllBytes(tempZip, www.bytes);
-                    }
-                    catch (Exception ex) { downloadError = ex.Message; }
-                }
-            }
+                downloadError = error;
+            });
 
             if (downloadError != null)
             {
@@ -944,72 +1073,106 @@ namespace BnlPlugins.Launcher
                 yield break;
             }
 
-            _downloadStatus = "Extracting files...";
+            _downloadStatus = "Launching installer...";
             yield return null;
 
-            string? extractError = null;
-            bool needsRestart = false;
+            string? launchError = null;
             try
             {
-                string gameRoot = System.IO.Path.GetDirectoryName(
-                    System.IO.Path.GetDirectoryName(
-                        System.IO.Path.GetDirectoryName(
-                            System.Reflection.Assembly.GetExecutingAssembly().Location))) ?? ".";
-
-                string win64Dir = System.IO.Path.Combine(gameRoot, "Win64");
-
-                // .NET 3.5 doesn't have ZipFile — use PowerShell for extraction
+                string gameRoot = GetGameRoot();
                 var psi = new System.Diagnostics.ProcessStartInfo
                 {
-                    FileName = "powershell.exe",
-                    Arguments = "-NoProfile -NonInteractive -Command \"Expand-Archive -Path '" +
-                        tempZip + "' -DestinationPath '" + win64Dir + "' -Force\"",
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true
+                    FileName = tempInstaller,
+                    Arguments = "\"" + gameRoot + "\"",
+                    UseShellExecute = true,
+                    WorkingDirectory = System.IO.Path.GetDirectoryName(tempInstaller) ?? "."
                 };
 
-                using (var proc = System.Diagnostics.Process.Start(psi))
-                {
-                    if (proc == null)
-                        throw new Exception("Could not start PowerShell");
-                    proc.WaitForExit(30000);
-                    if (proc.ExitCode != 0)
-                    {
-                        string err = proc.StandardError.ReadToEnd();
-                        throw new Exception("PowerShell exited with code " + proc.ExitCode +
-                            (string.IsNullOrEmpty(err) ? "" : ": " + err));
-                    }
-                }
-
-                // Update version file
-                string versionFile = System.IO.Path.Combine(
-                    System.IO.Path.Combine(
-                        System.IO.Path.Combine(
-                            System.IO.Path.Combine(win64Dir, "BepInEx"), "plugins"), "Launcher"), "version.txt");
-                try { System.IO.File.WriteAllText(versionFile, _newVersion); } catch { }
-
-                // Clean up temp
-                try { System.IO.File.Delete(tempZip); } catch { }
+                if (System.Diagnostics.Process.Start(psi) == null)
+                    throw new Exception("Could not launch installer.");
             }
-            catch (Exception ex) { extractError = ex.Message; }
+            catch (Exception ex) { launchError = ex.Message; }
 
-            if (extractError != null)
+            if (launchError != null)
             {
-                _errorMessage = "Extract failed: " + extractError;
+                _errorMessage = "Installer launch failed: " + launchError;
                 _downloading = false;
                 yield break;
             }
 
-            _downloadStatus = "Updated to v" + _newVersion + "!";
-            if (needsRestart)
-                _downloadStatus += " (restart game for plugin update)";
-
-            yield return new WaitForSeconds(3f);
+            _downloadStatus = "Installer opened. Close the game and finish the update there.";
+            yield return new WaitForSeconds(4f);
 
             _visible = false;
             Destroy(gameObject);
+        }
+
+        private System.Collections.IEnumerator DownloadFileWithPowerShell(string url, string destinationPath, Action<string?> onComplete)
+        {
+            string escapedUrl = EscapePowerShellSingleQuoted(url);
+            string escapedDest = EscapePowerShellSingleQuoted(destinationPath);
+            string command =
+                "$ErrorActionPreference='Stop'; " +
+                "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]3072 -bor [Net.SecurityProtocolType]768 -bor [Net.SecurityProtocolType]192; " +
+                "$wc = New-Object Net.WebClient; " +
+                "$wc.Headers['User-Agent'] = 'BNL-Launcher'; " +
+                "$wc.DownloadFile('" + escapedUrl + "', '" + escapedDest + "')";
+
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"" + command + "\"",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+
+            System.Diagnostics.Process? proc = null;
+            try
+            {
+                LauncherPlugin.Log.LogInfo("[BNL Launcher] Launching PowerShell download for " + url);
+                proc = System.Diagnostics.Process.Start(psi);
+            }
+            catch (Exception ex)
+            {
+                onComplete("could not start PowerShell: " + ex.Message);
+                yield break;
+            }
+
+            if (proc == null)
+            {
+                onComplete("could not start PowerShell");
+                yield break;
+            }
+
+            while (!proc.HasExited)
+                yield return null;
+
+            string stderr = proc.StandardError.ReadToEnd();
+            if (proc.ExitCode != 0)
+            {
+                onComplete(string.IsNullOrEmpty(stderr) ? "PowerShell exited with code " + proc.ExitCode : stderr.Trim());
+                yield break;
+            }
+
+            LauncherPlugin.Log.LogInfo("[BNL Launcher] PowerShell download completed successfully");
+            onComplete(null);
+        }
+
+        private static string EscapePowerShellSingleQuoted(string value)
+        {
+            return value.Replace("'", "''");
+        }
+
+        private static string GetGameRoot()
+        {
+            string pluginPath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+            string pluginsDir = System.IO.Path.GetDirectoryName(pluginPath) ?? ".";
+            string bepinexDir = System.IO.Path.GetDirectoryName(pluginsDir) ?? ".";
+            string win64Dir = System.IO.Path.GetDirectoryName(bepinexDir) ?? ".";
+            string gameRoot = System.IO.Path.GetDirectoryName(win64Dir) ?? win64Dir;
+            return gameRoot;
         }
     }
 
@@ -1083,11 +1246,8 @@ namespace BnlPlugins.Launcher
 
     public static class LauncherParityPatches
     {
-        private static object? _cachedCommunityServer;
-
         public static void SteamInit_Postfix()
         {
-            // Try to set via SteamLogin.Init postfix as a secondary mechanism
             try
             {
                 object playerData = GetSingletonInstance("PlayerData");
@@ -1100,128 +1260,63 @@ namespace BnlPlugins.Launcher
             }
         }
 
-        /// <summary>
-        /// Bulletproof: intercepts every read of PlayerData.MasterServer and returns
-        /// the community server if the official one is detected.
-        /// </summary>
-        public static void MasterServer_Getter_Postfix(ref object __result)
+        public static void SteamInitFinalize_Postfix()
         {
-            if (__result == null)
-                return;
-
-            // If already cached our community server, reuse it
-            if (_cachedCommunityServer != null)
-            {
-                __result = _cachedCommunityServer;
-                return;
-            }
-
             try
             {
-                Type msType = __result.GetType();
-                FieldInfo hostField = msType.GetField("Host",
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                PropertyInfo hostProp = hostField == null ? msType.GetProperty("Host",
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic) : null;
-
-                string? currentHost = null;
-                if (hostField != null)
-                    currentHost = hostField.GetValue(__result) as string;
-                else if (hostProp != null)
-                    currentHost = hostProp.GetValue(__result, null) as string;
-
-                // If already pointing to our community server, cache and return
-                if (currentHost == LauncherPlugin.DefaultServerHost)
+                object playerData = GetSingletonInstance("PlayerData");
+                if (playerData != null)
                 {
-                    _cachedCommunityServer = __result;
-                    return;
+                    SetMasterServerDirect(playerData);
+                    LauncherPlugin.Log.LogInfo("[BNL Launcher] Reapplied MasterServer after SteamLogin.<Init>m__641");
                 }
-
-                // Override: clone the object and set our host/port
-                object clone = Activator.CreateInstance(msType);
-
-                if (hostField != null)
-                    hostField.SetValue(clone, LauncherPlugin.DefaultServerHost);
-                else if (hostProp != null)
-                    hostProp.SetValue(clone, LauncherPlugin.DefaultServerHost, null);
-
-                FieldInfo portField = msType.GetField("Port",
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                PropertyInfo portProp = portField == null ? msType.GetProperty("Port",
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic) : null;
-
-                if (portField != null)
-                    portField.SetValue(clone, LauncherPlugin.DefaultServerPort);
-                else if (portProp != null)
-                    portProp.SetValue(clone, LauncherPlugin.DefaultServerPort, null);
-
-                _cachedCommunityServer = clone;
-                __result = clone;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                LauncherPlugin.Log.LogError("[BNL Launcher] Late SteamLogin override failed: " + ex.Message);
+            }
         }
 
         private static void SetMasterServerDirect(object playerData)
         {
-            Type masterServerType = Type.GetType("MasterServer, Assembly-CSharp") ??
-                                    Type.GetType("MasterServerInfo, Assembly-CSharp");
-            if (masterServerType == null)
+            FieldInfo msField = playerData.GetType().GetField("MasterServer",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (msField == null)
             {
-                LauncherPlugin.Log.LogWarning("[BNL Launcher] Could not find MasterServer type");
+                LauncherPlugin.Log.LogWarning("[BNL Launcher] Could not find PlayerData.MasterServer field");
                 return;
             }
 
-            FieldInfo msField = playerData.GetType().GetField("MasterServer",
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            if (msField == null) return;
-
-            // Try to create a new MasterServer instance
-            object msInstance = msField.GetValue(playerData);
-            if (msInstance == null)
+            object selectedServer = TryGetSelectedServer();
+            if (selectedServer == null)
             {
-                try { msInstance = Activator.CreateInstance(masterServerType); }
-                catch { return; }
+                selectedServer = CreateCommunityServer(msField.FieldType);
+            }
+            if (selectedServer == null)
+            {
+                LauncherPlugin.Log.LogWarning("[BNL Launcher] Could not create a community server instance");
+                return;
             }
 
-            // Set Host and Port via reflection
-            var hostField = masterServerType.GetField("Host",
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            var portField = masterServerType.GetField("Port",
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-
-            // Also try property setters if fields don't exist
-            if (hostField == null)
-            {
-                var hostProp = masterServerType.GetProperty("Host",
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (hostProp != null)
-                    hostProp.SetValue(msInstance, LauncherPlugin.DefaultServerHost, null);
-            }
-            else
-            {
-                hostField.SetValue(msInstance, LauncherPlugin.DefaultServerHost);
-            }
-
-            if (portField == null)
-            {
-                var portProp = masterServerType.GetProperty("Port",
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (portProp != null)
-                    portProp.SetValue(msInstance, LauncherPlugin.DefaultServerPort, null);
-            }
-            else
-            {
-                portField.SetValue(msInstance, LauncherPlugin.DefaultServerPort);
-            }
-
-            msField.SetValue(playerData, msInstance);
-            LauncherPlugin.Log.LogInfo("[BNL Launcher] Directly set MasterServer to " +
-                LauncherPlugin.DefaultServerHost + ":" + LauncherPlugin.DefaultServerPort);
+            msField.SetValue(playerData, selectedServer);
+            LauncherPlugin.Log.LogInfo("[BNL Launcher] Set PlayerData.MasterServer to " +
+                DescribeServer(selectedServer));
         }
 
         public static void PlayerDataIsNoob_Postfix(ref bool __result)
         {
             __result = false;
+        }
+
+        public static void ThreadNetworkClientConnect_Prefix(ref string host, ref int port)
+        {
+            if (!string.Equals(host, "162.55.251.122", StringComparison.OrdinalIgnoreCase) || port != 28100)
+                return;
+
+            LauncherPlugin.Log.LogInfo("[BNL Launcher] Rewriting master connect " + host + ":" + port +
+                                       " -> " + LauncherPlugin.DefaultServerHost + ":" + LauncherPlugin.DefaultServerPort);
+            host = LauncherPlugin.DefaultServerHost;
+            port = LauncherPlugin.DefaultServerPort;
         }
 
         private static object GetSingletonInstance(string typeName)
@@ -1235,6 +1330,111 @@ namespace BnlPlugins.Launcher
             PropertyInfo instanceProperty = singletonType.GetProperty("Instance",
                 BindingFlags.Static | BindingFlags.Public);
             return instanceProperty != null ? instanceProperty.GetValue(null, null) : null;
+        }
+
+        private static object? TryGetSelectedServer()
+        {
+            try
+            {
+                object loginLogic = GetSingletonInstance("LoginLogic");
+                if (loginLogic == null)
+                    return null;
+
+                FieldInfo serverSelectorField = loginLogic.GetType().GetField("ServerSelector",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                object serverSelector = serverSelectorField != null ? serverSelectorField.GetValue(loginLogic) : null;
+                if (serverSelector == null)
+                    return null;
+
+                Type helperType = Type.GetType("ServerSelector.ServerSelectorHelper, Assembly-CSharp");
+                MethodInfo getSelectedServer = helperType != null
+                    ? helperType.GetMethod("GetSelectedServer", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)
+                    : null;
+
+                object selectedServer = getSelectedServer != null
+                    ? getSelectedServer.Invoke(null, new[] { serverSelector })
+                    : null;
+                if (selectedServer != null)
+                {
+                    LauncherPlugin.Log.LogInfo("[BNL Launcher] Selected server from selector: " +
+                        DescribeServer(selectedServer));
+                }
+
+                return selectedServer;
+            }
+            catch (Exception ex)
+            {
+                LauncherPlugin.Log.LogWarning("[BNL Launcher] Failed resolving selected server: " + ex.Message);
+                return null;
+            }
+        }
+
+        private static object? CreateCommunityServer(Type serverType)
+        {
+            try
+            {
+                ConstructorInfo ctor = serverType.GetConstructor(new[] { typeof(string), typeof(string), typeof(short) });
+                if (ctor != null)
+                {
+                    return ctor.Invoke(new object[]
+                    {
+                        "public",
+                        LauncherPlugin.DefaultServerHost,
+                        (short)LauncherPlugin.DefaultServerPort
+                    });
+                }
+
+                object server = Activator.CreateInstance(serverType);
+                if (server == null)
+                    return null;
+
+                SetFieldOrProperty(server, "Name", "public");
+                SetFieldOrProperty(server, "Host", LauncherPlugin.DefaultServerHost);
+                SetFieldOrProperty(server, "Port", (short)LauncherPlugin.DefaultServerPort);
+                return server;
+            }
+            catch (Exception ex)
+            {
+                LauncherPlugin.Log.LogWarning("[BNL Launcher] Failed creating community server: " + ex.Message);
+                return null;
+            }
+        }
+
+        private static void SetFieldOrProperty(object target, string memberName, object value)
+        {
+            Type type = target.GetType();
+            FieldInfo field = type.GetField(memberName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (field != null)
+            {
+                field.SetValue(target, value);
+                return;
+            }
+
+            PropertyInfo prop = type.GetProperty(memberName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (prop != null && prop.CanWrite)
+                prop.SetValue(target, value, null);
+        }
+
+        private static string DescribeServer(object server)
+        {
+            if (server == null)
+                return "<null>";
+
+            string name = ReadFieldOrProperty(server, "Name") as string ?? "?";
+            string host = ReadFieldOrProperty(server, "Host") as string ?? "?";
+            object portValue = ReadFieldOrProperty(server, "Port");
+            return name + " " + host + ":" + portValue;
+        }
+
+        private static object? ReadFieldOrProperty(object target, string memberName)
+        {
+            Type type = target.GetType();
+            FieldInfo field = type.GetField(memberName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (field != null)
+                return field.GetValue(target);
+
+            PropertyInfo prop = type.GetProperty(memberName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            return prop != null ? prop.GetValue(target, null) : null;
         }
     }
 }

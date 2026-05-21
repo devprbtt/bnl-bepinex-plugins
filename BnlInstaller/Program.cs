@@ -13,11 +13,11 @@ namespace BnlInstaller
     static class Program
     {
         [STAThread]
-        static void Main()
+        static void Main(string[] args)
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new MainForm());
+            Application.Run(new MainForm(args.Length > 0 ? args[0] : null));
         }
     }
 
@@ -40,8 +40,11 @@ namespace BnlInstaller
         private ProgressBar _progressBar = null!;
         private Button _btnInstall = null!;
 
-        public MainForm()
+        private readonly string? _initialGamePath;
+
+        public MainForm(string? initialGamePath)
         {
+            _initialGamePath = initialGamePath;
             InitializeComponent();
             AutoDetectGameFolder();
         }
@@ -170,6 +173,13 @@ namespace BnlInstaller
 
         private void AutoDetectGameFolder()
         {
+            if (!string.IsNullOrEmpty(_initialGamePath) &&
+                File.Exists(Path.Combine(_initialGamePath, "Win64", "BlockNLoad.exe")))
+            {
+                _txtPath.Text = _initialGamePath;
+                return;
+            }
+
             string? path = FindBnlFolder();
             if (path != null)
                 _txtPath.Text = path;
@@ -290,9 +300,9 @@ namespace BnlInstaller
                     _lblStatus.Text = "Downloading latest release...";
                     Refresh();
 
-                    string latestJson;
-                    using (var client = new WebClient())
-                    {
+                string latestJson;
+                using (var client = new WebClient())
+                {
                         client.Headers.Add("User-Agent", "BNL-Installer");
                         try
                         {
@@ -307,21 +317,7 @@ namespace BnlInstaller
                         }
                     }
 
-                    // Simple JSON parsing
-                    var tagName = ExtractJsonString(latestJson, "tag_name") ?? "";
-                    var htmlUrl = ExtractJsonString(latestJson, "html_url") ?? "";
-                    var assetUrl = ExtractJsonString(latestJson, "browser_download_url") ?? "";
-
-                    // Find zip asset URL from full JSON
-                    if (string.IsNullOrEmpty(assetUrl))
-                    {
-                        var assetsStart = latestJson.IndexOf("\"assets\":[", StringComparison.Ordinal);
-                        if (assetsStart >= 0)
-                        {
-                            assetUrl = ExtractJsonString(
-                                latestJson.Substring(assetsStart), "browser_download_url");
-                        }
-                    }
+                    var assetUrl = FindAssetUrl(latestJson, ".zip");
 
                     if (string.IsNullOrEmpty(assetUrl))
                         throw new Exception("No release zip found on GitHub.\n\n" +
@@ -341,6 +337,11 @@ namespace BnlInstaller
                 // Extract
                 _lblStatus.Text = $"Installing to {gamePath}...";
                 Refresh();
+
+                if (IsGameRunning(gamePath))
+                {
+                    throw new Exception("Block N Load is currently running.\n\nClose the game first, then run the installer again.");
+                }
 
                 var win64Dir = Path.Combine(gamePath, "Win64");
                 var pluginsDir = Path.Combine(win64Dir, "BepInEx", "plugins");
@@ -425,6 +426,45 @@ namespace BnlInstaller
             if (end < 0) return null;
 
             return json.Substring(start, end - start);
+        }
+
+        private static string? FindAssetUrl(string json, string requiredExtension)
+        {
+            const string marker = "\"browser_download_url\":\"";
+            int searchFrom = 0;
+            while (true)
+            {
+                int start = json.IndexOf(marker, searchFrom, StringComparison.Ordinal);
+                if (start < 0)
+                    return null;
+
+                start += marker.Length;
+                int end = json.IndexOf("\"", start, StringComparison.Ordinal);
+                if (end < 0)
+                    return null;
+
+                string candidate = json.Substring(start, end - start);
+                if (candidate.EndsWith(requiredExtension, StringComparison.OrdinalIgnoreCase))
+                    return candidate;
+
+                searchFrom = end + 1;
+            }
+        }
+
+        private static bool IsGameRunning(string gamePath)
+        {
+            string targetExe = Path.Combine(gamePath, "Win64", "BlockNLoad.exe");
+            foreach (var process in System.Diagnostics.Process.GetProcessesByName("BlockNLoad"))
+            {
+                try
+                {
+                    if (string.Equals(process.MainModule?.FileName, targetExe, StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+                catch { }
+            }
+
+            return false;
         }
     }
 }

@@ -39,6 +39,10 @@ if ($LASTEXITCODE -ne 0) { throw "Launcher build failed" }
 dotnet build "$workspace\BnlInstaller\BnlInstaller.csproj" -c Release
 if ($LASTEXITCODE -ne 0) { throw "Installer build failed" }
 
+# Build uninstaller exe
+dotnet build "$workspace\BnlUninstaller\BnlUninstaller.csproj" -c Release
+if ($LASTEXITCODE -ne 0) { throw "Uninstaller build failed" }
+
 Write-Host "=== Preparing release package ==="
 
 $staging = Join-Path $OutputDir "staging"
@@ -77,17 +81,10 @@ if (Test-Path $cfgManDir) {
 $Version | Out-File -FilePath (Join-Path $staging "Win64\BepInEx\plugins\Launcher\version.txt") -Encoding ascii -NoNewline
 Write-Host "  Version: $Version"
 
-# Copy card override images — pull from game folder (source of truth) first,
-# then fill in any missing from workspace dist
+# Copy card override images from workspace dist only.
+# Releases must be reproducible and must not pick up personal overrides
+# from the local game install.
 $cardStaging = Join-Path $staging "Win64\BepInEx\plugins\Launcher\CardTextures"
-if ($GameRoot) {
-    $gameCardDir = "$GameRoot\Win64\BepInEx\plugins\Launcher\CardTextures"
-    if (Test-Path $gameCardDir) {
-        Copy-Item "$gameCardDir\*" $cardStaging -Exclude "*.base.png"
-        Write-Host "  Copied card textures from game folder: $gameCardDir"
-    }
-}
-# Fallback: workspace dist card textures
 $distCardDir = "$workspace\bepinex-dist\BepInEx\plugins\Launcher\CardTextures"
 if (Test-Path $distCardDir) {
     Copy-Item "$distCardDir\*" $cardStaging -Exclude "*.base.png"
@@ -103,6 +100,7 @@ Remove-Item $staging -Recurse -Force
 
 # Copy installer exe to release folder
 Copy-Item "$workspace\BnlInstaller\bin\Release\net472\BNL-Installer.exe" $OutputDir -Force
+Copy-Item "$workspace\BnlUninstaller\bin\Release\net472\BNL-Uninstaller.exe" $OutputDir -Force
 
 $zipSize = [math]::Round((Get-Item $zipPath).Length / 1MB, 2)
 Write-Host "=== Done: $zipPath ($zipSize MB) ==="
@@ -110,7 +108,9 @@ Write-Host ""
 Write-Host "Release assets ready in: $OutputDir"
 Write-Host "  $zipName"
 Write-Host "  BNL-Installer.exe"
+Write-Host "  BNL-Uninstaller.exe"
 Write-Host ""
 Write-Host "Upload both to GitHub Releases. Users can either:"
 Write-Host "  1. Run BNL-Installer.exe (auto-detect + GUI, no dependencies)"
-Write-Host "  2. Extract the zip manually"
+Write-Host "  2. Run BNL-Uninstaller.exe to remove launcher files"
+Write-Host "  3. Extract the zip manually"

@@ -57,6 +57,22 @@ function Find-BnlFolder {
     return $null
 }
 
+function Test-BnlRunning {
+    param([string]$GamePath)
+
+    $targetExe = Join-Path $GamePath "Win64\BlockNLoad.exe"
+    foreach ($proc in Get-Process -Name "BlockNLoad" -ErrorAction SilentlyContinue) {
+        try {
+            if ($proc.MainModule.FileName -ieq $targetExe) {
+                return $true
+            }
+        }
+        catch { }
+    }
+
+    return $false
+}
+
 # ── Windows Forms GUI ─────────────────────────────────────────────────
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -188,6 +204,10 @@ $btnInstall.Add_Click({
     $form.Refresh()
     
     try {
+        if (Test-BnlRunning -GamePath $gamePath) {
+            throw "Block N Load is currently running.`n`nClose the game first, then run the installer again."
+        }
+
         # Find the release zip — check local folder first, then GitHub
         $scriptDir = Split-Path -Parent (Get-Command $PSCommandPath -ErrorAction SilentlyContinue).Path
         if (-not $scriptDir) { $scriptDir = Get-Location }

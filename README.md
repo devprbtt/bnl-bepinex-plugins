@@ -79,15 +79,46 @@ The launcher checks for new versions automatically when you start the game. If a
 │  Installed: v1.2.0                            │
 │  Latest:    v1.3.0                            │
 │                                               │
-│  [Download Update]    [Remind Me Later]       │
+│  [Open Installer]     [Remind Me Later]       │
 └───────────────────────────────────────────────┘
 ```
 
-Clicking **Download Update** opens the GitHub releases page where you can download the latest `install.ps1` or zip file.
+Clicking **Open Installer** downloads and launches `BNL-Installer.exe`, which lets you choose which components to install.
 
 ## Uninstalling
 
-Delete the `winhttp.dll` file from `BlockNLoad\Win64\`. That's it — the game goes back to vanilla.
+### Option 1: Automatic Uninstaller
+
+1. **Download** `BNL-Uninstaller.exe` from the latest release
+2. **Run** it
+3. Pick what to remove:
+   - launcher plugin
+   - card override folder
+   - launcher config/version files
+   - optional Configuration Manager
+   - optional BepInEx runtime and Doorstop files
+
+By default it removes only the community launcher files, so other WIP plugins can stay installed.
+
+### Option 2: Manual Removal
+
+At minimum, delete:
+
+```
+BlockNLoad\Win64\BepInEx\plugins\BnlPlugins.Launcher.dll
+BlockNLoad\Win64\BepInEx\plugins\Launcher\
+BlockNLoad\Win64\BepInEx\config\BnlPlugins.Launcher.cfg
+```
+
+If you want to fully revert the loader too, also delete:
+
+```
+BlockNLoad\Win64\winhttp.dll
+BlockNLoad\Win64\.doorstop_version
+BlockNLoad\Win64\doorstop_config.ini
+BlockNLoad\Win64\changelog.txt
+BlockNLoad\Win64\BepInEx\
+```
 
 ---
 
