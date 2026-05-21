@@ -73,6 +73,105 @@ function Test-BnlRunning {
     return $false
 }
 
+function Test-SteamRunning {
+    return (Get-Process -Name "steam","steamwebhelper" -ErrorAction SilentlyContinue | Measure-Object).Count -gt 0
+}
+
+function Find-SteamPath {
+    $steamPaths = @(
+        "HKLM:\SOFTWARE\WOW6432Node\Valve\Steam",
+        "HKCU:\SOFTWARE\Valve\Steam"
+    )
+
+    foreach ($sp in $steamPaths) {
+        try {
+            $installPath = (Get-ItemProperty -Path $sp -Name "InstallPath" -ErrorAction Stop).InstallPath
+            if ($installPath) { return $installPath }
+        }
+        catch { }
+    }
+
+    return $null
+}
+
+function Set-BnlSteamLaunchOptions {
+    param([string]$LaunchOptions)
+
+    $steamPath = Find-SteamPath
+    if (-not $steamPath) { return 0 }
+
+    $userdataDir = Join-Path $steamPath "userdata"
+    if (-not (Test-Path $userdataDir)) { return 0 }
+
+    $updatedCount = 0
+    Get-ChildItem $userdataDir -Filter "localconfig.vdf" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+        $path = $_.FullName
+        try {
+            $lines = [System.Collections.Generic.List[string]](Get-Content $path)
+            $appLine = -1
+            for ($i = 0; $i -lt $lines.Count; $i++) {
+                if ($lines[$i].Contains('"299360"')) {
+                    $j = $i + 1
+                    while ($j -lt $lines.Count -and [string]::IsNullOrWhiteSpace($lines[$j])) { $j++ }
+                    if ($j -lt $lines.Count -and $lines[$j].Trim() -eq '{') {
+                        $appLine = $i
+                        break
+                    }
+                }
+            }
+
+            if ($appLine -lt 0) { return }
+
+            $openBraceLine = $appLine + 1
+            while ($openBraceLine -lt $lines.Count -and $lines[$openBraceLine].Trim() -ne '{') { $openBraceLine++ }
+            if ($openBraceLine -ge $lines.Count) { return }
+
+            $depth = 0
+            $closeBraceLine = -1
+            for ($i = $openBraceLine; $i -lt $lines.Count; $i++) {
+                $trimmed = $lines[$i].Trim()
+                if ($trimmed -eq '{') { $depth++ }
+                elseif ($trimmed -eq '}') {
+                    $depth--
+                    if ($depth -eq 0) {
+                        $closeBraceLine = $i
+                        break
+                    }
+                }
+            }
+
+            if ($closeBraceLine -lt 0) { return }
+
+            $escaped = $LaunchOptions.Replace('\', '\\').Replace('"', '\"')
+            $launchLine = "`t`t`t`t`t" + '"LaunchOptions"' + "`t`t" + '"' + $escaped + '"'
+            $changed = $false
+
+            for ($i = $openBraceLine + 1; $i -lt $closeBraceLine; $i++) {
+                if ($lines[$i].Contains('"LaunchOptions"')) {
+                    if ($lines[$i].Trim() -ne $launchLine.Trim()) {
+                        $lines[$i] = $launchLine
+                        $changed = $true
+                    }
+                    break
+                }
+            }
+
+            if (-not $changed -and -not ($lines[($openBraceLine + 1)..($closeBraceLine - 1)] | Where-Object { $_.Contains('"LaunchOptions"') })) {
+                $lines.Insert($closeBraceLine, $launchLine)
+                $changed = $true
+            }
+
+            if ($changed) {
+                Set-Content -Path $path -Value $lines
+                $script:updatedCount++
+            }
+        }
+        catch { }
+    }
+
+    return $updatedCount
+}
+
 # ── Windows Forms GUI ─────────────────────────────────────────────────
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -80,7 +179,7 @@ Add-Type -AssemblyName System.Drawing
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "BNL Community Launcher - Installer"
-$form.Size = New-Object System.Drawing.Size(520, 460)
+$form.Size = New-Object System.Drawing.Size(520, 485)
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = "FixedDialog"
 $form.MaximizeBox = $false
@@ -122,7 +221,7 @@ $groupGame.Controls.Add($btnBrowse)
 # Plugins group
 $groupPlugins = New-Object System.Windows.Forms.GroupBox
 $groupPlugins.Text = "Components to Install"
-$groupPlugins.Size = New-Object System.Drawing.Size(480, 145)
+$groupPlugins.Size = New-Object System.Drawing.Size(480, 170)
 $groupPlugins.Location = New-Object System.Drawing.Point(15, 160)
 
 # Mandatory: Card Textures
@@ -156,28 +255,36 @@ $chkCfgManager.Checked = $true
 $chkCfgManager.Size = New-Object System.Drawing.Size(460, 20)
 $chkCfgManager.Location = New-Object System.Drawing.Point(10, 97)
 
+# Optional: Steam launch option
+$chkSteamLaunchOption = New-Object System.Windows.Forms.CheckBox
+$chkSteamLaunchOption.Text = "Optional: set Steam launch options to start BlockNLoad.exe directly"
+$chkSteamLaunchOption.Checked = $false
+$chkSteamLaunchOption.Size = New-Object System.Drawing.Size(460, 20)
+$chkSteamLaunchOption.Location = New-Object System.Drawing.Point(10, 122)
+
 $groupPlugins.Controls.Add($chkCardTextures)
 $groupPlugins.Controls.Add($chkBepInEx)
 $groupPlugins.Controls.Add($chkLauncher)
 $groupPlugins.Controls.Add($chkCfgManager)
+$groupPlugins.Controls.Add($chkSteamLaunchOption)
 
 # Progress
 $lblStatus = New-Object System.Windows.Forms.Label
 $lblStatus.Text = ""
 $lblStatus.Size = New-Object System.Drawing.Size(480, 40)
-$lblStatus.Location = New-Object System.Drawing.Point(15, 315)
+$lblStatus.Location = New-Object System.Drawing.Point(15, 340)
 
 $progressBar = New-Object System.Windows.Forms.ProgressBar
 $progressBar.Style = "Marquee"
 $progressBar.Visible = $false
 $progressBar.Size = New-Object System.Drawing.Size(480, 20)
-$progressBar.Location = New-Object System.Drawing.Point(15, 355)
+$progressBar.Location = New-Object System.Drawing.Point(15, 380)
 
 # Install button
 $btnInstall = New-Object System.Windows.Forms.Button
 $btnInstall.Text = "Install"
 $btnInstall.Size = New-Object System.Drawing.Size(100, 30)
-$btnInstall.Location = New-Object System.Drawing.Point(200, 385)
+$btnInstall.Location = New-Object System.Drawing.Point(200, 410)
 $btnInstall.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
 
 # ── Events ────────────────────────────────────────────────────────────
@@ -206,6 +313,9 @@ $btnInstall.Add_Click({
     try {
         if (Test-BnlRunning -GamePath $gamePath) {
             throw "Block N Load is currently running.`n`nClose the game first, then run the installer again."
+        }
+        if ($chkSteamLaunchOption.Checked -and (Test-SteamRunning)) {
+            throw "Steam is currently running.`n`nClose Steam first if you want the installer to update Block N Load launch options."
         }
 
         # Find the release zip — check local folder first, then GitHub
@@ -299,6 +409,17 @@ $btnInstall.Add_Click({
             [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $destPath, $true)
         }
         $zip.Dispose()
+
+        $launchOptionStatus = ""
+        if ($chkSteamLaunchOption.Checked) {
+            $launchOptions = '"' + (Join-Path $gamePath "Win64\BlockNLoad.exe") + '" %COMMAND%'
+            $updatedConfigs = Set-BnlSteamLaunchOptions -LaunchOptions $launchOptions
+            if ($updatedConfigs -le 0) {
+                throw "The mod files were installed, but Steam launch options could not be updated automatically.`n`nMake sure Steam has been opened at least once for this user and Block N Load has a localconfig.vdf entry."
+            }
+
+            $launchOptionStatus = "`n`nSteam launch options updated for $updatedConfigs Steam user configuration(s)."
+        }
         
         # Cleanup temp (only if we downloaded it)
         if ($tempZip -like "$env:TEMP*") {
@@ -311,7 +432,7 @@ $btnInstall.Add_Click({
         # Done!
         $result = [System.Windows.Forms.MessageBox]::Show(
             "BNL Community Launcher has been installed!`n`n" +
-            "Launch Block N Load through Steam to play on the community server.`n`n" +
+            "Launch Block N Load through Steam to play on the community server." + $launchOptionStatus + "`n`n" +
             "Open the CardTextures folder now?",
             "Installation Complete", "YesNo", "Information")
         

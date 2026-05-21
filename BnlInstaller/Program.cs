@@ -65,6 +65,7 @@ namespace BnlInstaller
         private CheckBox _chkBepInEx = null!;
         private CheckBox _chkLauncher = null!;
         private CheckBox _chkCfgManager = null!;
+        private CheckBox _chkSteamLaunchOption = null!;
         private Label _lblStatus = null!;
         private ProgressBar _progressBar = null!;
         private Button _btnInstall = null!;
@@ -94,7 +95,7 @@ namespace BnlInstaller
         private void InitializeComponent()
         {
             Text = "BNL Community Launcher - Installer";
-            ClientSize = new Size(500, 440);
+            ClientSize = new Size(500, 465);
             StartPosition = FormStartPosition.CenterScreen;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
@@ -148,7 +149,7 @@ namespace BnlInstaller
             _groupPlugins = new GroupBox
             {
                 Text = "Components to Install",
-                Size = new Size(470, 145),
+                Size = new Size(470, 170),
                 Location = new Point(15, 155)
             };
 
@@ -156,19 +157,21 @@ namespace BnlInstaller
             _chkCardTextures = MakeCheckBox("Card Textures (custom perk images) - REQUIRED", y, true, false); y += 25;
             _chkBepInEx = MakeCheckBox("BepInEx (mod loader) - REQUIRED", y, true, false); y += 25;
             _chkLauncher = MakeCheckBox("Community Launcher (server connect + EAC bypass) - REQUIRED", y, true, false); y += 25;
-            _chkCfgManager = MakeCheckBox("Configuration Manager (in-game settings, press `)", y, true, true);
+            _chkCfgManager = MakeCheckBox("Configuration Manager (in-game settings, press `)", y, true, true); y += 25;
+            _chkSteamLaunchOption = MakeCheckBox("Optional: set Steam launch options to start BlockNLoad.exe directly", y, false, true);
 
             _groupPlugins.Controls.Add(_chkCardTextures);
             _groupPlugins.Controls.Add(_chkBepInEx);
             _groupPlugins.Controls.Add(_chkLauncher);
             _groupPlugins.Controls.Add(_chkCfgManager);
+            _groupPlugins.Controls.Add(_chkSteamLaunchOption);
 
             // Status
             _lblStatus = new Label
             {
                 Text = "",
                 Size = new Size(470, 35),
-                Location = new Point(15, 308)
+                Location = new Point(15, 333)
             };
 
             // Progress
@@ -177,7 +180,7 @@ namespace BnlInstaller
                 Style = ProgressBarStyle.Marquee,
                 Visible = false,
                 Size = new Size(470, 20),
-                Location = new Point(15, 370)
+                Location = new Point(15, 395)
             };
 
             // Install button
@@ -185,7 +188,7 @@ namespace BnlInstaller
             {
                 Text = "Install",
                 Size = new Size(110, 32),
-                Location = new Point(195, 398),
+                Location = new Point(195, 423),
                 Font = new Font("Segoe UI", 10f, FontStyle.Bold)
             };
             _btnInstall.Click += BtnInstall_Click;
@@ -385,6 +388,11 @@ namespace BnlInstaller
                     throw new Exception("Block N Load is currently running.\n\nClose the game first, then run the installer again.");
                 }
 
+                if (_chkSteamLaunchOption.Checked && IsSteamRunning())
+                {
+                    throw new Exception("Steam is currently running.\n\nClose Steam first if you want the installer to update Block N Load launch options.");
+                }
+
                 var win64Dir = Path.Combine(gamePath, "Win64");
                 var pluginsDir = Path.Combine(win64Dir, "BepInEx", "plugins");
                 var cardDir = Path.Combine(pluginsDir, "Launcher", "CardTextures");
@@ -420,6 +428,21 @@ namespace BnlInstaller
                     }
                 }
 
+                string launchOptionStatus = "";
+                if (_chkSteamLaunchOption.Checked)
+                {
+                    string launchOptions = "\"" + Path.Combine(gamePath, "Win64", "BlockNLoad.exe") + "\" %COMMAND%";
+                    int updatedConfigs = SetSteamLaunchOptionsForBlockNLoad(launchOptions);
+                    if (updatedConfigs <= 0)
+                    {
+                        throw new Exception(
+                            "The mod files were installed, but Steam launch options could not be updated automatically.\n\n" +
+                            "Make sure Steam has been opened at least once for this user and Block N Load has a localconfig.vdf entry.");
+                    }
+
+                    launchOptionStatus = "\n\nSteam launch options updated for " + updatedConfigs + " Steam user configuration(s).";
+                }
+
                 // Cleanup temp
                 if (tempZip.StartsWith(Path.GetTempPath(), StringComparison.OrdinalIgnoreCase))
                 {
@@ -431,7 +454,8 @@ namespace BnlInstaller
 
                 var result = MessageBox.Show(
                     "BNL Community Launcher has been installed!\n\n" +
-                    "Launch Block N Load through Steam to play on the community server.\n\n" +
+                    "Launch Block N Load through Steam to play on the community server." +
+                    launchOptionStatus + "\n\n" +
                     "Open the CardTextures folder now?",
                     "Installation Complete", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
 
@@ -474,7 +498,7 @@ namespace BnlInstaller
         {
             try
             {
-                string currentVersion = _currentVersionOverride;
+                string currentVersion = _currentVersionOverride ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(currentVersion))
                 {
                     var gamePath = _txtPath.Text.Trim();
@@ -578,6 +602,142 @@ namespace BnlInstaller
             }
 
             return false;
+        }
+
+        private static bool IsSteamRunning()
+        {
+            return System.Diagnostics.Process.GetProcessesByName("steam").Length > 0
+                || System.Diagnostics.Process.GetProcessesByName("steamwebhelper").Length > 0;
+        }
+
+        private static string? FindSteamPath()
+        {
+            try
+            {
+                using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\WOW6432Node\Valve\Steam"))
+                {
+                    var installPath = key?.GetValue("InstallPath") as string;
+                    if (!string.IsNullOrWhiteSpace(installPath))
+                        return installPath;
+                }
+            }
+            catch { }
+
+            try
+            {
+                using (var key = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Valve\Steam"))
+                {
+                    var installPath = key?.GetValue("InstallPath") as string;
+                    if (!string.IsNullOrWhiteSpace(installPath))
+                        return installPath;
+                }
+            }
+            catch { }
+
+            return null;
+        }
+
+        private static int SetSteamLaunchOptionsForBlockNLoad(string launchOptions)
+        {
+            string? steamPath = FindSteamPath();
+            if (string.IsNullOrWhiteSpace(steamPath))
+                return 0;
+
+            string userdataDir = Path.Combine(steamPath, "userdata");
+            if (!Directory.Exists(userdataDir))
+                return 0;
+
+            int updatedCount = 0;
+            foreach (string localConfigPath in Directory.EnumerateFiles(userdataDir, "localconfig.vdf", SearchOption.AllDirectories))
+            {
+                try
+                {
+                    if (TryUpdateSteamLocalConfig(localConfigPath, launchOptions))
+                        updatedCount++;
+                }
+                catch { }
+            }
+
+            return updatedCount;
+        }
+
+        private static bool TryUpdateSteamLocalConfig(string localConfigPath, string launchOptions)
+        {
+            var lines = File.ReadAllLines(localConfigPath).ToList();
+            int appLine = -1;
+
+            for (int i = 0; i < lines.Count; i++)
+            {
+                if (lines[i].Contains("\"299360\""))
+                {
+                    int j = i + 1;
+                    while (j < lines.Count && string.IsNullOrWhiteSpace(lines[j]))
+                        j++;
+
+                    if (j < lines.Count && lines[j].Trim() == "{")
+                    {
+                        appLine = i;
+                        break;
+                    }
+                }
+            }
+
+            if (appLine < 0)
+                return false;
+
+            int openBraceLine = appLine + 1;
+            while (openBraceLine < lines.Count && lines[openBraceLine].Trim() != "{")
+                openBraceLine++;
+
+            if (openBraceLine >= lines.Count)
+                return false;
+
+            int depth = 0;
+            int closeBraceLine = -1;
+            for (int i = openBraceLine; i < lines.Count; i++)
+            {
+                string trimmed = lines[i].Trim();
+                if (trimmed == "{")
+                    depth++;
+                else if (trimmed == "}")
+                {
+                    depth--;
+                    if (depth == 0)
+                    {
+                        closeBraceLine = i;
+                        break;
+                    }
+                }
+            }
+
+            if (closeBraceLine < 0)
+                return false;
+
+            string launchLine = "\t\t\t\t\t\"LaunchOptions\"\t\t\"" + EscapeVdfString(launchOptions) + "\"";
+
+            for (int i = openBraceLine + 1; i < closeBraceLine; i++)
+            {
+                if (lines[i].Contains("\"LaunchOptions\""))
+                {
+                    if (string.Equals(lines[i].Trim(), launchLine.Trim(), StringComparison.Ordinal))
+                        return false;
+
+                    lines[i] = launchLine;
+                    File.WriteAllLines(localConfigPath, lines);
+                    return true;
+                }
+            }
+
+            lines.Insert(closeBraceLine, launchLine);
+            File.WriteAllLines(localConfigPath, lines);
+            return true;
+        }
+
+        private static string EscapeVdfString(string value)
+        {
+            return value
+                .Replace("\\", "\\\\")
+                .Replace("\"", "\\\"");
         }
 
         private static bool IsNewerVersion(string latest, string current)

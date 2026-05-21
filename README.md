@@ -11,6 +11,7 @@ One-click mod for Block N Load that connects you to the community server — no 
 1. **Download** `BNL-Installer.exe` from the [latest release](https://github.com/devprbtt/bnl-bepinex-plugins/releases/latest)
 2. **Double-click** to run — no dependencies, works on any Windows 10/11 PC
 3. The installer auto-detects your Block N Load folder, lets you pick components, and installs everything
+4. Optional: enable the Steam launch-options checkbox if you want the installer to write the direct `BlockNLoad.exe` launch option for your Steam user
 
 ### Option 2: Manual Install
 
@@ -77,6 +78,16 @@ The launcher checks for updates automatically when you start the game, but the a
 - If you're already up to date, nothing opens.
 - If an update is available, `BNL-Installer.exe` opens and lets you choose which components to install.
 - You can also force a manual check from the in-game Configuration Manager.
+
+## Steam Launch Option
+
+The installer can optionally write a Steam launch option for Block N Load:
+
+```
+"...\BlockNLoad\Win64\BlockNLoad.exe" %COMMAND%
+```
+
+This is off by default and must be selected in the installer. If you use it, close Steam before installing so the change is written to your Steam user config cleanly.
 
 ## Uninstalling
 
