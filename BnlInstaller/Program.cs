@@ -15,9 +15,38 @@ namespace BnlInstaller
         [STAThread]
         static void Main(string[] args)
         {
+            string? gamePath = null;
+            string? currentVersion = null;
+            bool checkUpdates = false;
+            bool silentNoUpdate = false;
+
+            foreach (string arg in args)
+            {
+                if (arg.StartsWith("--game-path=", StringComparison.OrdinalIgnoreCase))
+                {
+                    gamePath = arg.Substring("--game-path=".Length).Trim('"');
+                }
+                else if (arg.StartsWith("--current-version=", StringComparison.OrdinalIgnoreCase))
+                {
+                    currentVersion = arg.Substring("--current-version=".Length).Trim('"');
+                }
+                else if (string.Equals(arg, "--check-updates", StringComparison.OrdinalIgnoreCase))
+                {
+                    checkUpdates = true;
+                }
+                else if (string.Equals(arg, "--silent-no-update", StringComparison.OrdinalIgnoreCase))
+                {
+                    silentNoUpdate = true;
+                }
+                else if (!arg.StartsWith("--", StringComparison.Ordinal) && string.IsNullOrEmpty(gamePath))
+                {
+                    gamePath = arg;
+                }
+            }
+
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new MainForm(args.Length > 0 ? args[0] : null));
+            Application.Run(new MainForm(gamePath, checkUpdates, silentNoUpdate, currentVersion));
         }
     }
 
@@ -41,12 +70,25 @@ namespace BnlInstaller
         private Button _btnInstall = null!;
 
         private readonly string? _initialGamePath;
+        private readonly bool _checkUpdatesOnStart;
+        private readonly bool _silentNoUpdate;
+        private readonly string? _currentVersionOverride;
 
-        public MainForm(string? initialGamePath)
+        public MainForm(string? initialGamePath, bool checkUpdatesOnStart, bool silentNoUpdate, string? currentVersionOverride)
         {
             _initialGamePath = initialGamePath;
+            _checkUpdatesOnStart = checkUpdatesOnStart;
+            _silentNoUpdate = silentNoUpdate;
+            _currentVersionOverride = currentVersionOverride;
             InitializeComponent();
             AutoDetectGameFolder();
+            Shown += MainForm_Shown;
+        }
+
+        private void MainForm_Shown(object? sender, EventArgs e)
+        {
+            if (_checkUpdatesOnStart)
+                BeginInvoke(new Action(CheckForUpdatesOnly));
         }
 
         private void InitializeComponent()
@@ -114,7 +156,7 @@ namespace BnlInstaller
             _chkCardTextures = MakeCheckBox("Card Textures (custom perk images) - REQUIRED", y, true, false); y += 25;
             _chkBepInEx = MakeCheckBox("BepInEx (mod loader) - REQUIRED", y, true, false); y += 25;
             _chkLauncher = MakeCheckBox("Community Launcher (server connect + EAC bypass) - REQUIRED", y, true, false); y += 25;
-            _chkCfgManager = MakeCheckBox("Configuration Manager (in-game settings, press F1)", y, true, true);
+            _chkCfgManager = MakeCheckBox("Configuration Manager (in-game settings, press `)", y, true, true);
 
             _groupPlugins.Controls.Add(_chkCardTextures);
             _groupPlugins.Controls.Add(_chkBepInEx);
@@ -428,6 +470,77 @@ namespace BnlInstaller
             return json.Substring(start, end - start);
         }
 
+        private void CheckForUpdatesOnly()
+        {
+            try
+            {
+                string currentVersion = _currentVersionOverride;
+                if (string.IsNullOrWhiteSpace(currentVersion))
+                {
+                    var gamePath = _txtPath.Text.Trim();
+                    if (!string.IsNullOrEmpty(gamePath))
+                    {
+                        string versionPath = Path.Combine(gamePath, "Win64", "BepInEx", "plugins", "Launcher", "version.txt");
+                        if (File.Exists(versionPath))
+                            currentVersion = File.ReadAllText(versionPath).Trim();
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(currentVersion))
+                    currentVersion = "0.0.0";
+
+                string latestVersion;
+                using (var client = new WebClient())
+                {
+                    client.Headers.Add("User-Agent", "BNL-Installer");
+                    latestVersion = client.DownloadString(
+                        $"https://raw.githubusercontent.com/{RepoOwner}/{RepoName}/master/latest-version.txt").Trim();
+                }
+
+                latestVersion = latestVersion.Trim();
+                if (latestVersion.StartsWith("v", StringComparison.OrdinalIgnoreCase))
+                    latestVersion = latestVersion.Substring(1);
+                if (currentVersion.StartsWith("v", StringComparison.OrdinalIgnoreCase))
+                    currentVersion = currentVersion.Substring(1);
+
+                if (!IsNewerVersion(latestVersion, currentVersion))
+                {
+                    if (_silentNoUpdate)
+                    {
+                        Close();
+                        return;
+                    }
+
+                    MessageBox.Show(
+                        $"You're up to date.\n\nInstalled: v{currentVersion}\nLatest: v{latestVersion}",
+                        "BNL Community Launcher",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
+                    Close();
+                    return;
+                }
+
+                _lblStatus.Text = $"Update available: v{latestVersion} (installed v{currentVersion}). Close the game before installing.";
+                _btnInstall.Text = "Update";
+                Activate();
+            }
+            catch (Exception ex)
+            {
+                if (_silentNoUpdate)
+                {
+                    Close();
+                    return;
+                }
+
+                MessageBox.Show(
+                    "Update check failed:\n" + ex.Message,
+                    "BNL Community Launcher",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                Close();
+            }
+        }
+
         private static string? FindAssetUrl(string json, string requiredExtension)
         {
             const string marker = "\"browser_download_url\":\"";
@@ -465,6 +578,30 @@ namespace BnlInstaller
             }
 
             return false;
+        }
+
+        private static bool IsNewerVersion(string latest, string current)
+        {
+            try
+            {
+                string[] latestParts = latest.Split('.');
+                string[] currentParts = current.Split('.');
+                int maxLen = Math.Max(latestParts.Length, currentParts.Length);
+
+                for (int i = 0; i < maxLen; i++)
+                {
+                    int l = i < latestParts.Length ? int.Parse(latestParts[i]) : 0;
+                    int c = i < currentParts.Length ? int.Parse(currentParts[i]) : 0;
+                    if (l > c) return true;
+                    if (l < c) return false;
+                }
+
+                return false;
+            }
+            catch
+            {
+                return string.Compare(latest, current, StringComparison.OrdinalIgnoreCase) > 0;
+            }
         }
     }
 }

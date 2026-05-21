@@ -57,33 +57,26 @@ host=v310.blocknload.pauldh.nl
 port=28100
 ```
 
-You can also change these settings in-game: press **F1** to open the Configuration Manager.
+You can also change these settings in-game: press **`** to open the Configuration Manager.
 
 ## Configuration Manager
 
-Press **F1** in-game to open a settings menu where you can change plugin settings without editing config files:
+Press **`** in-game to open a settings menu where you can change plugin settings without editing config files:
 
 - Server host and port
 - Any future configurable options
 
 This is powered by [BepInEx.ConfigurationManager](https://github.com/BepInEx/BepInEx.ConfigurationManager) — included automatically.
 
+The default hotkey is **`**.
+
 ## Auto-Updates
 
-The launcher checks for new versions automatically when you start the game. If a newer version is available, a popup will appear:
+The launcher checks for updates automatically when you start the game, but the actual update logic is handled by the local installer instead of the game itself.
 
-```
-┌─ BNL Community Launcher - Update Available ─┐
-│                                               │
-│  A new version is available!                  │
-│  Installed: v1.2.0                            │
-│  Latest:    v1.3.0                            │
-│                                               │
-│  [Open Installer]     [Remind Me Later]       │
-└───────────────────────────────────────────────┘
-```
-
-Clicking **Open Installer** downloads and launches `BNL-Installer.exe`, which lets you choose which components to install.
+- If you're already up to date, nothing opens.
+- If an update is available, `BNL-Installer.exe` opens and lets you choose which components to install.
+- You can also force a manual check from the in-game Configuration Manager.
 
 ## Uninstalling
 

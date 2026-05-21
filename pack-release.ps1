@@ -66,9 +66,11 @@ Copy-Item "$workspace\bepinex-dist\BepInEx\core\*" (Join-Path $staging "Win64\Be
 
 # Copy BepInEx config
 Copy-Item "$workspace\bepinex-dist\BepInEx\config\BepInEx.cfg" (Join-Path $staging "Win64\BepInEx\config")
+Copy-Item "$workspace\bepinex-dist\BepInEx\config\com.bepis.bepinex.configurationmanager.cfg" (Join-Path $staging "Win64\BepInEx\config") -ErrorAction SilentlyContinue
 
 # Copy built plugin DLL
 Copy-Item "$workspace\BnlPlugins.Launcher\bin\Release\net35\BnlPlugins.Launcher.dll" (Join-Path $staging "Win64\BepInEx\plugins")
+Copy-Item "$workspace\BnlInstaller\bin\Release\net472\BNL-Installer.exe" (Join-Path $staging "Win64\BepInEx\plugins\Launcher\BNL-Installer.exe")
 
 # Copy Configuration Manager (in-game settings menu, F1)
 $cfgManDir = "$workspace\bepinex-dist\BepInEx\plugins\ConfigurationManager"

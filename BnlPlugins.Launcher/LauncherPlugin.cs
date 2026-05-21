@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using BepInEx;
+using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
 using UnityEngine;
@@ -21,10 +22,10 @@ namespace BnlPlugins.Launcher
     ///   - EACToolInitializer.Initialize()/KickPlayer()/leave hooks → disabled
     ///   - Writes servers.txt for community server selection
     /// </summary>
-    [BepInPlugin("bnl.community.launcher", "BNL Launcher Patches", "1.2.1")]
+    [BepInPlugin("bnl.community.launcher", "BNL Launcher Patches", "1.2.5")]
     public class LauncherPlugin : BaseUnityPlugin
     {
-        internal const string CurrentVersion = "1.2.1";
+        internal const string CurrentVersion = "1.2.5";
         private const string GitHubRepo = "devprbtt/bnl-bepinex-plugins";
         private const string LatestVersionUrl = "https://raw.githubusercontent.com/devprbtt/bnl-bepinex-plugins/master/latest-version.txt";
 
@@ -42,6 +43,7 @@ namespace BnlPlugins.Launcher
         private static string _lastCheckFilePath = string.Empty;
         private static bool _checkRequested;
         private static int _lastManualCheckFrame = -1;
+        private ConfigEntry<bool>? _checkForUpdatesNowEntry;
 
         private void Awake()
         {
@@ -73,9 +75,11 @@ namespace BnlPlugins.Launcher
 
         private void Update()
         {
-            if (Input.GetKeyDown(KeyCode.F5) && !_checkRequested)
+            if (_checkForUpdatesNowEntry != null && _checkForUpdatesNowEntry.Value)
             {
-                QueueManualUpdateCheck("Update");
+                _checkForUpdatesNowEntry.Value = false;
+                if (!_checkRequested)
+                    QueueManualUpdateCheck("ConfigurationManager");
             }
 
             if (!_checkRequested)
@@ -85,16 +89,6 @@ namespace BnlPlugins.Launcher
             StartCoroutine(CheckForUpdatesCoroutine(true));
         }
 
-        private void OnGUI()
-        {
-            Event current = Event.current;
-            if (current != null && current.type == EventType.KeyDown && current.keyCode == KeyCode.F5 && !_checkRequested)
-            {
-                QueueManualUpdateCheck("OnGUI");
-                current.Use();
-            }
-        }
-
         private void QueueManualUpdateCheck(string source)
         {
             if (_lastManualCheckFrame == Time.frameCount)
@@ -102,12 +96,39 @@ namespace BnlPlugins.Launcher
 
             _lastManualCheckFrame = Time.frameCount;
             Logger.Log(BepInEx.Logging.LogLevel.Info,
-                "[BNL Launcher] Manual update check requested (F5) via " + source);
+                "[BNL Launcher] Manual update check requested via " + source);
             _checkRequested = true;
         }
 
         private void LoadConfig()
         {
+            _checkForUpdatesNowEntry = Config.Bind(
+                "Updates",
+                "Check For Updates Now",
+                false,
+                new ConfigDescription(
+                    "Run an update check immediately.",
+                    null,
+                    new ConfigurationManagerAttributes
+                    {
+                        Order = 100,
+                        HideDefaultButton = true,
+                        HideSettingName = true,
+                        CustomDrawer = _ =>
+                        {
+                            GUILayout.BeginHorizontal();
+                            GUILayout.Label("Run an update check now.", GUILayout.ExpandWidth(true));
+                            bool clicked = GUILayout.Button("Check Now", GUILayout.Width(140f));
+                            GUILayout.EndHorizontal();
+
+                            if (clicked && !_checkRequested)
+                            {
+                                _checkForUpdatesNowEntry.Value = false;
+                                QueueManualUpdateCheck("ConfigurationManager");
+                            }
+                        }
+                    }));
+
             string cfgPath = Path.Combine(
                 Path.Combine(Paths.GameRootPath, "BepInEx"),
                 Path.Combine("config", "BnlPlugins.Launcher.cfg"));
@@ -531,20 +552,13 @@ namespace BnlPlugins.Launcher
 
         private System.Collections.IEnumerator CheckForUpdatesCoroutine(bool force)
         {
-            // Wait for the game to fully load before showing any UI
             yield return new WaitForSeconds(10f);
 
-            // Handle manual re-check requests (bypasses rate limit and _updateCheckDone)
             if (!force && _updateCheckDone)
                 yield break;
 
             _updateCheckDone = true;
 
-            string latestVersion = null;
-            string releaseUrl = null;
-            string releaseName = "";
-            string releaseBody = "";
-            string installerDownloadUrl = null;
             string installedVersion = CurrentVersion;
             if (File.Exists(_versionFilePath))
             {
@@ -557,45 +571,8 @@ namespace BnlPlugins.Launcher
                 catch { }
             }
 
-            string latestVersionText = "";
-            string? fetchError = null;
-
             Logger.Log(BepInEx.Logging.LogLevel.Info,
-                "[BNL Launcher] Update check backend: PowerShell");
-            Logger.Log(BepInEx.Logging.LogLevel.Info,
-                "[BNL Launcher] Starting update check: " + LatestVersionUrl);
-
-            yield return FetchUrlWithPowerShell(LatestVersionUrl, result =>
-            {
-                latestVersionText = result;
-            }, error =>
-            {
-                fetchError = error;
-            });
-
-            if (!string.IsNullOrEmpty(fetchError))
-            {
-                Logger.Log(BepInEx.Logging.LogLevel.Warning,
-                    "[BNL Launcher] Update check failed: " + fetchError);
-                yield break;
-            }
-
-            Logger.Log(BepInEx.Logging.LogLevel.Info,
-                "[BNL Launcher] Update check fetch succeeded. Bytes=" + latestVersionText.Length);
-
-            latestVersion = latestVersionText.Trim();
-            if (latestVersion.StartsWith("v", StringComparison.OrdinalIgnoreCase))
-                latestVersion = latestVersion.Substring(1);
-
-            if (string.IsNullOrEmpty(latestVersion))
-            {
-                Logger.Log(BepInEx.Logging.LogLevel.Warning,
-                    "[BNL Launcher] Update check failed: latest-version.txt was empty");
-                yield break;
-            }
-
-            releaseUrl = "https://github.com/" + GitHubRepo + "/releases/tag/v" + latestVersion;
-            installerDownloadUrl = "https://github.com/" + GitHubRepo + "/releases/download/v" + latestVersion + "/BNL-Installer.exe";
+                "[BNL Launcher] Update check backend: local installer");
 
             try
             {
@@ -603,25 +580,36 @@ namespace BnlPlugins.Launcher
             }
             catch { }
 
-            if (string.IsNullOrEmpty(latestVersion))
+            string installerPath = Path.Combine(Path.Combine(PluginDir, "Launcher"), "BNL-Installer.exe");
+            if (!File.Exists(installerPath))
+            {
+                Logger.Log(BepInEx.Logging.LogLevel.Warning,
+                    "[BNL Launcher] Update check skipped: installer not found at " + installerPath);
                 yield break;
+            }
 
-            Logger.Log(BepInEx.Logging.LogLevel.Info,
-                "[BNL Launcher] Installed: v" + installedVersion + ", Latest: v" + latestVersion);
+            string gameRoot = Paths.GameRootPath;
+            string args = "--check-updates --game-path=\"" + gameRoot + "\" --current-version=" + installedVersion;
+            if (!force)
+                args += " --silent-no-update";
 
-            if (IsNewerVersion(latestVersion, installedVersion))
+            try
             {
                 Logger.Log(BepInEx.Logging.LogLevel.Info,
-                    "[BNL Launcher] New version available: v" + latestVersion);
-                ShowUpdateNotification(latestVersion, releaseUrl, installedVersion, releaseName, releaseBody, installerDownloadUrl);
+                    "[BNL Launcher] Launching installer update check: " + installerPath);
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = installerPath,
+                    Arguments = args,
+                    UseShellExecute = true,
+                    WorkingDirectory = Path.GetDirectoryName(installerPath) ?? PluginDir
+                });
             }
-            else if (force)
+            catch (Exception ex)
             {
-                // User manually checked — tell them they're up to date
-                var go = new GameObject("BNL_UpdateNotifier");
-                DontDestroyOnLoad(go);
-            go.AddComponent<UpdateNotifier>().InitializeUpToDate(CurrentVersion);
-        }
+                Logger.Log(BepInEx.Logging.LogLevel.Warning,
+                    "[BNL Launcher] Failed to launch installer update check: " + ex.Message);
+            }
         }
 
         private static string ExtractJsonString(string json, string key)
@@ -750,14 +738,165 @@ namespace BnlPlugins.Launcher
 
         private System.Collections.IEnumerator FetchUrlWithPowerShell(string url, Action<string> onSuccess, Action<string> onError)
         {
+            string stdout = "";
+            string? fetchError = null;
+
+            yield return FetchUrlWithWww(url, result =>
+            {
+                stdout = result ?? "";
+            }, error =>
+            {
+                fetchError = error;
+            });
+
+            if (!string.IsNullOrEmpty(fetchError))
+            {
+                Log.Log(BepInEx.Logging.LogLevel.Warning,
+                    "[BNL Launcher] WWW fetch failed, falling back to curl.exe: " + fetchError);
+
+                fetchError = null;
+                stdout = "";
+
+                yield return FetchUrlWithCurl(url, result =>
+                {
+                    stdout = result ?? "";
+                }, error =>
+                {
+                    fetchError = error;
+                });
+            }
+
+            if (!string.IsNullOrEmpty(fetchError))
+            {
+                Log.Log(BepInEx.Logging.LogLevel.Warning,
+                    "[BNL Launcher] curl.exe fetch failed, falling back to PowerShell: " + fetchError);
+
+                fetchError = null;
+                stdout = "";
+
+                yield return FetchUrlWithPowerShellFallback(url, result =>
+                {
+                    stdout = result ?? "";
+                }, error =>
+                {
+                    fetchError = error;
+                });
+
+                if (!string.IsNullOrEmpty(fetchError))
+                {
+                    onError(fetchError);
+                    yield break;
+                }
+            }
+
+            Logger.Log(BepInEx.Logging.LogLevel.Info,
+                "[BNL Launcher] Update fetch completed successfully");
+            onSuccess(stdout);
+        }
+
+        private static System.Collections.IEnumerator FetchUrlWithWww(string url, Action<string> onSuccess, Action<string> onError)
+        {
+            Log.Log(BepInEx.Logging.LogLevel.Info,
+                "[BNL Launcher] Launching WWW fetch for " + url);
+
+            using (var www = new WWW(url))
+            {
+                while (!www.isDone)
+                    yield return null;
+
+                if (!string.IsNullOrEmpty(www.error))
+                {
+                    onError(www.error);
+                    yield break;
+                }
+
+                string text = www.text ?? "";
+                Log.Log(BepInEx.Logging.LogLevel.Info,
+                    "[BNL Launcher] WWW fetch completed successfully. Bytes=" + text.Length);
+                onSuccess(text);
+            }
+        }
+
+        private static System.Collections.IEnumerator FetchUrlWithCurl(string url, Action<string> onSuccess, Action<string> onError)
+        {
+            string tempOutput = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "bnl-update-check-curl.txt");
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "curl.exe",
+                Arguments = "--fail --location --silent --show-error -A \"BNL-Launcher\" -o \"" + tempOutput + "\" \"" + url + "\"",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardError = true
+            };
+
+            System.Diagnostics.Process? proc = null;
+            try
+            {
+                Log.Log(BepInEx.Logging.LogLevel.Info,
+                    "[BNL Launcher] Launching curl fetch for " + url);
+                proc = System.Diagnostics.Process.Start(psi);
+            }
+            catch (Exception ex)
+            {
+                onError("could not start curl.exe: " + ex.Message);
+                yield break;
+            }
+
+            if (proc == null)
+            {
+                onError("could not start curl.exe");
+                yield break;
+            }
+
+            while (!proc.HasExited)
+                yield return null;
+
+            string stderr = proc.StandardError.ReadToEnd();
+            if (proc.ExitCode != 0)
+            {
+                onError(string.IsNullOrEmpty(stderr) ? "curl.exe exited with code " + proc.ExitCode : stderr.Trim());
+                yield break;
+            }
+
+            string stdout = "";
+            try
+            {
+                if (System.IO.File.Exists(tempOutput))
+                {
+                    long size = new System.IO.FileInfo(tempOutput).Length;
+                    Log.Log(BepInEx.Logging.LogLevel.Info,
+                        "[BNL Launcher] curl fetch temp file size=" + size);
+                    stdout = System.IO.File.ReadAllText(tempOutput, Encoding.UTF8);
+                }
+                else
+                {
+                    Log.Log(BepInEx.Logging.LogLevel.Warning,
+                        "[BNL Launcher] curl fetch temp file was not created");
+                }
+            }
+            catch (Exception ex)
+            {
+                onError("could not read curl response: " + ex.Message);
+                yield break;
+            }
+            finally
+            {
+                try { if (System.IO.File.Exists(tempOutput)) System.IO.File.Delete(tempOutput); } catch { }
+            }
+
+            Log.Log(BepInEx.Logging.LogLevel.Info,
+                "[BNL Launcher] curl fetch completed successfully");
+            onSuccess(stdout);
+        }
+
+        private static System.Collections.IEnumerator FetchUrlWithPowerShellFallback(string url, Action<string> onSuccess, Action<string> onError)
+        {
             string escapedUrl = EscapePowerShellSingleQuoted(url);
-            string tempOutput = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "bnl-update-check.json");
-            string escapedOut = EscapePowerShellSingleQuoted(tempOutput);
             string command =
                 "$ErrorActionPreference='Stop'; " +
                 "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]3072 -bor [Net.SecurityProtocolType]768 -bor [Net.SecurityProtocolType]192; " +
                 "$ProgressPreference='SilentlyContinue'; " +
-                "Invoke-WebRequest -UseBasicParsing -Headers @{'User-Agent'='BNL-Launcher'} -Uri '" + escapedUrl + "' -OutFile '" + escapedOut + "'";
+                "(Invoke-WebRequest -UseBasicParsing -Headers @{'User-Agent'='BNL-Launcher'} -Uri '" + escapedUrl + "').Content";
 
             var psi = new System.Diagnostics.ProcessStartInfo
             {
@@ -772,7 +911,7 @@ namespace BnlPlugins.Launcher
             System.Diagnostics.Process? proc = null;
             try
             {
-                Logger.Log(BepInEx.Logging.LogLevel.Info,
+                Log.Log(BepInEx.Logging.LogLevel.Info,
                     "[BNL Launcher] Launching PowerShell fetch for " + url);
                 proc = System.Diagnostics.Process.Start(psi);
             }
@@ -791,33 +930,132 @@ namespace BnlPlugins.Launcher
             while (!proc.HasExited)
                 yield return null;
 
+            string stdout = proc.StandardOutput.ReadToEnd();
             string stderr = proc.StandardError.ReadToEnd();
-
             if (proc.ExitCode != 0)
             {
                 onError(string.IsNullOrEmpty(stderr) ? "PowerShell exited with code " + proc.ExitCode : stderr.Trim());
                 yield break;
             }
 
-            string stdout = "";
+            onSuccess(stdout);
+        }
+
+        internal static System.Collections.IEnumerator DownloadUrlToFile(string url, string destinationPath, Action<string?> onComplete)
+        {
+            string? curlError = null;
+            yield return RunCurlDownload(url, destinationPath, error =>
+            {
+                curlError = error;
+            });
+
+            if (string.IsNullOrEmpty(curlError))
+            {
+                onComplete(null);
+                yield break;
+            }
+
+            Log.Log(BepInEx.Logging.LogLevel.Warning,
+                "[BNL Launcher] curl.exe download failed, falling back to PowerShell: " + curlError);
+
+            yield return RunPowerShellDownload(url, destinationPath, onComplete);
+        }
+
+        private static System.Collections.IEnumerator RunCurlDownload(string url, string destinationPath, Action<string?> onComplete)
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "curl.exe",
+                Arguments = "--fail --location --silent --show-error -A \"BNL-Launcher\" -o \"" + destinationPath + "\" \"" + url + "\"",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+
+            System.Diagnostics.Process? proc = null;
             try
             {
-                if (System.IO.File.Exists(tempOutput))
-                    stdout = System.IO.File.ReadAllText(tempOutput, Encoding.UTF8);
+                Log.Log(BepInEx.Logging.LogLevel.Info,
+                    "[BNL Launcher] Launching curl download for " + url);
+                proc = System.Diagnostics.Process.Start(psi);
             }
             catch (Exception ex)
             {
-                onError("could not read update response: " + ex.Message);
+                onComplete("could not start curl.exe: " + ex.Message);
                 yield break;
             }
-            finally
+
+            if (proc == null)
             {
-                try { if (System.IO.File.Exists(tempOutput)) System.IO.File.Delete(tempOutput); } catch { }
+                onComplete("could not start curl.exe");
+                yield break;
             }
 
-            Logger.Log(BepInEx.Logging.LogLevel.Info,
-                "[BNL Launcher] PowerShell fetch completed successfully");
-            onSuccess(stdout);
+            while (!proc.HasExited)
+                yield return null;
+
+            string stderr = proc.StandardError.ReadToEnd();
+            if (proc.ExitCode != 0)
+            {
+                onComplete(string.IsNullOrEmpty(stderr) ? "curl.exe exited with code " + proc.ExitCode : stderr.Trim());
+                yield break;
+            }
+
+            onComplete(null);
+        }
+
+        private static System.Collections.IEnumerator RunPowerShellDownload(string url, string destinationPath, Action<string?> onComplete)
+        {
+            string escapedUrl = EscapePowerShellSingleQuoted(url);
+            string escapedDest = EscapePowerShellSingleQuoted(destinationPath);
+            string command =
+                "$ErrorActionPreference='Stop'; " +
+                "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]3072 -bor [Net.SecurityProtocolType]768 -bor [Net.SecurityProtocolType]192; " +
+                "$ProgressPreference='SilentlyContinue'; " +
+                "Invoke-WebRequest -UseBasicParsing -Headers @{'User-Agent'='BNL-Launcher'} -Uri '" + escapedUrl + "' -OutFile '" + escapedDest + "'";
+
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand " + EncodePowerShellCommand(command),
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+
+            System.Diagnostics.Process? proc = null;
+            try
+            {
+                Log.Log(BepInEx.Logging.LogLevel.Info,
+                    "[BNL Launcher] Launching PowerShell download for " + url);
+                proc = System.Diagnostics.Process.Start(psi);
+            }
+            catch (Exception ex)
+            {
+                onComplete("could not start PowerShell: " + ex.Message);
+                yield break;
+            }
+
+            if (proc == null)
+            {
+                onComplete("could not start PowerShell");
+                yield break;
+            }
+
+            while (!proc.HasExited)
+                yield return null;
+
+            string stderr = proc.StandardError.ReadToEnd();
+
+            if (proc.ExitCode != 0)
+            {
+                onComplete(string.IsNullOrEmpty(stderr) ? "PowerShell exited with code " + proc.ExitCode : stderr.Trim());
+                yield break;
+            }
+
+            onComplete(null);
         }
 
         private static string EscapePowerShellSingleQuoted(string value)
@@ -999,7 +1237,7 @@ namespace BnlPlugins.Launcher
                 GUILayout.EndHorizontal();
 
                 GUILayout.Space(4);
-                GUILayout.Label("Tip: Press F5 to manually re-check for updates",
+                GUILayout.Label("Tip: Open the config menu to manually re-check for updates",
                     new GUIStyle(GUI.skin.label) { fontSize = 8, alignment = TextAnchor.MiddleCenter });
             }
 
@@ -1083,55 +1321,7 @@ namespace BnlPlugins.Launcher
 
         private System.Collections.IEnumerator DownloadFileWithPowerShell(string url, string destinationPath, Action<string?> onComplete)
         {
-            string escapedUrl = EscapePowerShellSingleQuoted(url);
-            string escapedDest = EscapePowerShellSingleQuoted(destinationPath);
-            string command =
-                "$ErrorActionPreference='Stop'; " +
-                "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]3072 -bor [Net.SecurityProtocolType]768 -bor [Net.SecurityProtocolType]192; " +
-                "$wc = New-Object Net.WebClient; " +
-                "$wc.Headers['User-Agent'] = 'BNL-Launcher'; " +
-                "$wc.DownloadFile('" + escapedUrl + "', '" + escapedDest + "')";
-
-            var psi = new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = "powershell.exe",
-                Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand " + EncodePowerShellCommand(command),
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
-
-            System.Diagnostics.Process? proc = null;
-            try
-            {
-                LauncherPlugin.Log.LogInfo("[BNL Launcher] Launching PowerShell download for " + url);
-                proc = System.Diagnostics.Process.Start(psi);
-            }
-            catch (Exception ex)
-            {
-                onComplete("could not start PowerShell: " + ex.Message);
-                yield break;
-            }
-
-            if (proc == null)
-            {
-                onComplete("could not start PowerShell");
-                yield break;
-            }
-
-            while (!proc.HasExited)
-                yield return null;
-
-            string stderr = proc.StandardError.ReadToEnd();
-            if (proc.ExitCode != 0)
-            {
-                onComplete(string.IsNullOrEmpty(stderr) ? "PowerShell exited with code " + proc.ExitCode : stderr.Trim());
-                yield break;
-            }
-
-            LauncherPlugin.Log.LogInfo("[BNL Launcher] PowerShell download completed successfully");
-            onComplete(null);
+            yield return LauncherPlugin.DownloadUrlToFile(url, destinationPath, onComplete);
         }
 
         private static string EscapePowerShellSingleQuoted(string value)

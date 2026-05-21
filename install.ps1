@@ -151,7 +151,7 @@ $chkLauncher.Location = New-Object System.Drawing.Point(10, 72)
 
 # Optional: Configuration Manager
 $chkCfgManager = New-Object System.Windows.Forms.CheckBox
-$chkCfgManager.Text = "Configuration Manager (in-game settings menu, press F1)"
+$chkCfgManager.Text = "Configuration Manager (in-game settings menu, press `)"
 $chkCfgManager.Checked = $true
 $chkCfgManager.Size = New-Object System.Drawing.Size(460, 20)
 $chkCfgManager.Location = New-Object System.Drawing.Point(10, 97)
