@@ -26,6 +26,7 @@ namespace BnlPlugins.Launcher
     {
         internal const string CurrentVersion = "1.2.1";
         private const string GitHubRepo = "devprbtt/bnl-bepinex-plugins";
+        private const string LatestVersionUrl = "https://raw.githubusercontent.com/devprbtt/bnl-bepinex-plugins/master/latest-version.txt";
 
         internal static string DefaultServerHost = "v310.blocknload.pauldh.nl";
         internal static int DefaultServerPort = 28100;
@@ -541,8 +542,8 @@ namespace BnlPlugins.Launcher
 
             string latestVersion = null;
             string releaseUrl = null;
-            string releaseName = null;
-            string releaseBody = null;
+            string releaseName = "";
+            string releaseBody = "";
             string installerDownloadUrl = null;
             string installedVersion = CurrentVersion;
             if (File.Exists(_versionFilePath))
@@ -556,18 +557,17 @@ namespace BnlPlugins.Launcher
                 catch { }
             }
 
-            string apiUrl = "https://api.github.com/repos/" + GitHubRepo + "/releases/latest";
-            string json = "";
+            string latestVersionText = "";
             string? fetchError = null;
 
             Logger.Log(BepInEx.Logging.LogLevel.Info,
                 "[BNL Launcher] Update check backend: PowerShell");
             Logger.Log(BepInEx.Logging.LogLevel.Info,
-                "[BNL Launcher] Starting update check: " + apiUrl);
+                "[BNL Launcher] Starting update check: " + LatestVersionUrl);
 
-            yield return FetchUrlWithPowerShell(apiUrl, result =>
+            yield return FetchUrlWithPowerShell(LatestVersionUrl, result =>
             {
-                json = result;
+                latestVersionText = result;
             }, error =>
             {
                 fetchError = error;
@@ -581,33 +581,27 @@ namespace BnlPlugins.Launcher
             }
 
             Logger.Log(BepInEx.Logging.LogLevel.Info,
-                "[BNL Launcher] Update check fetch succeeded. Bytes=" + json.Length);
+                "[BNL Launcher] Update check fetch succeeded. Bytes=" + latestVersionText.Length);
+
+            latestVersion = latestVersionText.Trim();
+            if (latestVersion.StartsWith("v", StringComparison.OrdinalIgnoreCase))
+                latestVersion = latestVersion.Substring(1);
+
+            if (string.IsNullOrEmpty(latestVersion))
+            {
+                Logger.Log(BepInEx.Logging.LogLevel.Warning,
+                    "[BNL Launcher] Update check failed: latest-version.txt was empty");
+                yield break;
+            }
+
+            releaseUrl = "https://github.com/" + GitHubRepo + "/releases/tag/v" + latestVersion;
+            installerDownloadUrl = "https://github.com/" + GitHubRepo + "/releases/download/v" + latestVersion + "/BNL-Installer.exe";
 
             try
             {
-
-                latestVersion = ExtractJsonString(json, "tag_name");
-                releaseUrl = ExtractJsonString(json, "html_url");
-                releaseName = ExtractJsonString(json, "name");
-                releaseBody = ExtractJsonBody(json);
-                installerDownloadUrl = FindAssetUrl(json, ".exe", "BNL-Installer");
-
-                if (latestVersion != null && latestVersion.StartsWith("v", StringComparison.OrdinalIgnoreCase))
-                    latestVersion = latestVersion.Substring(1);
-
-                // Record successful check timestamp
-                try
-                {
-                    File.WriteAllText(_lastCheckFilePath, DateTime.UtcNow.Ticks.ToString());
-                }
-                catch { }
+                File.WriteAllText(_lastCheckFilePath, DateTime.UtcNow.Ticks.ToString());
             }
-            catch (Exception ex)
-            {
-                Logger.Log(BepInEx.Logging.LogLevel.Warning,
-                    "[BNL Launcher] Update check failed: " + ex.Message);
-                yield break;
-            }
+            catch { }
 
             if (string.IsNullOrEmpty(latestVersion))
                 yield break;
@@ -628,31 +622,6 @@ namespace BnlPlugins.Launcher
                 DontDestroyOnLoad(go);
             go.AddComponent<UpdateNotifier>().InitializeUpToDate(CurrentVersion);
         }
-        }
-
-        private static string? FindAssetUrl(string json, string requiredExtension, string requiredNamePart = "")
-        {
-            int assetsIdx = json.IndexOf("\"assets\":[", StringComparison.Ordinal);
-            if (assetsIdx < 0) return null;
-
-            int searchFrom = assetsIdx;
-            while (true)
-            {
-                int urlIdx = json.IndexOf("\"browser_download_url\":\"", searchFrom, StringComparison.Ordinal);
-                if (urlIdx < 0) return null;
-
-                urlIdx += "\"browser_download_url\":\"".Length;
-                int urlEnd = json.IndexOf("\"", urlIdx, StringComparison.Ordinal);
-                if (urlEnd < 0) return null;
-
-                string candidate = json.Substring(urlIdx, urlEnd - urlIdx);
-                if (candidate.EndsWith(requiredExtension, StringComparison.OrdinalIgnoreCase) &&
-                    (string.IsNullOrEmpty(requiredNamePart) ||
-                     candidate.IndexOf(requiredNamePart, StringComparison.OrdinalIgnoreCase) >= 0))
-                    return candidate;
-
-                searchFrom = urlEnd + 1;
-            }
         }
 
         private static string ExtractJsonString(string json, string key)
@@ -793,7 +762,7 @@ namespace BnlPlugins.Launcher
             var psi = new System.Diagnostics.ProcessStartInfo
             {
                 FileName = "powershell.exe",
-                Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"" + command + "\"",
+                Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand " + EncodePowerShellCommand(command),
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
@@ -854,6 +823,11 @@ namespace BnlPlugins.Launcher
         private static string EscapePowerShellSingleQuoted(string value)
         {
             return value.Replace("'", "''");
+        }
+
+        private static string EncodePowerShellCommand(string command)
+        {
+            return Convert.ToBase64String(Encoding.Unicode.GetBytes(command));
         }
     }
 
@@ -1121,7 +1095,7 @@ namespace BnlPlugins.Launcher
             var psi = new System.Diagnostics.ProcessStartInfo
             {
                 FileName = "powershell.exe",
-                Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"" + command + "\"",
+                Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand " + EncodePowerShellCommand(command),
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
@@ -1163,6 +1137,11 @@ namespace BnlPlugins.Launcher
         private static string EscapePowerShellSingleQuoted(string value)
         {
             return value.Replace("'", "''");
+        }
+
+        private static string EncodePowerShellCommand(string command)
+        {
+            return Convert.ToBase64String(Encoding.Unicode.GetBytes(command));
         }
 
         private static string GetGameRoot()
