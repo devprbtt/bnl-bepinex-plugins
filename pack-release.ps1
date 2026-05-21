@@ -2,7 +2,7 @@
 # The zip mirrors the game folder structure — user just extracts to
 # their BlockNLoad folder and launches through Steam.
 param(
-    [string]$Version = "1.1.0",
+    [string]$Version = "1.3.1",
     [string]$OutputDir = ".\release",
     [string]$GameRoot = ""
 )
@@ -49,6 +49,13 @@ if (Test-Path $crosshairProject) {
     if ($LASTEXITCODE -ne 0) { throw "Crosshair plugin build failed" }
 }
 
+$combatNumbersProject = "$workspace\BnlPlugins.CombatNumbers\BnlPlugins.CombatNumbers.csproj"
+$combatNumbersDll = "$workspace\BnlPlugins.CombatNumbers\bin\Release\net35\BnlPlugins.CombatNumbers.dll"
+if (Test-Path $combatNumbersProject) {
+    dotnet build $combatNumbersProject -c Release
+    if ($LASTEXITCODE -ne 0) { throw "CombatNumbers plugin build failed" }
+}
+
 # Build installer exe
 dotnet build "$workspace\BnlInstaller\BnlInstaller.csproj" -c Release
 if ($LASTEXITCODE -ne 0) { throw "Installer build failed" }
@@ -90,6 +97,9 @@ if (Test-Path $fovDll) {
 }
 if (Test-Path $crosshairDll) {
     Copy-Item $crosshairDll (Join-Path $staging "Win64\BepInEx\plugins")
+}
+if (Test-Path $combatNumbersDll) {
+    Copy-Item $combatNumbersDll (Join-Path $staging "Win64\BepInEx\plugins")
 }
 
 # Copy Configuration Manager (in-game settings menu, F1)
@@ -179,6 +189,19 @@ if (Test-Path $crosshairDll) {
         default = $false
         paths = @(
             "BepInEx/plugins/BnlPlugins.Crosshair.dll"
+        )
+    }
+}
+
+if (Test-Path $combatNumbersDll) {
+    $manifestComponents += [ordered]@{
+        id = "combatnumbers"
+        name = "Combat Numbers"
+        description = "Damage and healing number styling, combine behavior, and self-heal display controls."
+        required = $false
+        default = $false
+        paths = @(
+            "BepInEx/plugins/BnlPlugins.CombatNumbers.dll"
         )
     }
 }

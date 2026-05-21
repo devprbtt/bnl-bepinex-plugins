@@ -10,6 +10,7 @@ In addition to the core launcher, the installer offers optional quality-of-life 
 
 | Plugin | Description |
 |--------|-------------|
+| **Combat Numbers** | Customize damage and healing numbers, including colors, size, combine behavior, and self-heal offsets. Configure in-game via the Configuration Manager (press **`**). |
 | **Crosshair** | Custom crosshair color, size, spread, shape, and ADS visibility. Configure in-game via the Configuration Manager (press **`**). |
 | **FOV / ADS** | Override camera FOV, ADS sensitivity multiplier, and weapon model FOV. |
 
@@ -96,6 +97,30 @@ When installed, the Crosshair plugin lets you customize the in-game crosshair vi
 - **Force Shape** — override the weapon's crosshair type (`Dot`, `Crosshair`, `BrokenCircle`, `Hashed`, `HashedCrosshair`, `Melee`, or `__DEFAULT__` to leave it as-is).
 - **Force Show in ADS** — keep the crosshair visible while aiming down sights.
 - **Hide Crosshair** — hide it entirely.
+
+## Combat Numbers Plugin
+
+When installed, the Combat Numbers plugin lets you customize how damage and healing numbers appear:
+
+- **General**
+  - **Enabled** — turn combat number overrides on or off.
+  - **Alpha** — overall opacity for all damage and healing numbers.
+- **Damage Numbers**
+  - **Damage Color / Crit Color** — colors for normal and critical hits.
+  - **Size Multiplier** — scale damage number size.
+  - **Combine Damage** — accumulate repeated hits on the same target into one fading number.
+  - **Show All Damage** — show damage numbers from all sources instead of only your own hits.
+- **Healing Numbers**
+  - **Heal Color** — color for healing numbers.
+  - **Size Multiplier** — scale healing number size.
+  - **Minimum Heal** — smallest heal amount that should produce a number.
+  - **Show Friendly Healing / Show Self Healing** — control which healing numbers appear.
+  - **Combine Healing** — accumulate rapid heals into one fading number.
+- **Self Heal**
+  - **Size Multiplier** — scale self-heal numbers separately.
+  - **Offset X / Offset Y** — move self-heal numbers on screen.
+
+Configure in-game via the Configuration Manager (press **`**), or edit `BepInEx\\config\\bnl.community.combatnumbers.cfg`.
 
 ## Auto-Updates
 
