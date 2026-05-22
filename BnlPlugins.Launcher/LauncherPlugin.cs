@@ -496,7 +496,9 @@ namespace BnlPlugins.Launcher
             if (_updateCheckDone)
                 return;
 
-            // Read installed version from file
+            // Read installed version from file. If the file reports something older
+            // than this DLL's own version, the DLL is newer — trust CurrentVersion
+            // and update the file so the next check uses the correct baseline.
             string installedVersion = CurrentVersion;
             if (File.Exists(_versionFilePath))
             {
@@ -504,14 +506,22 @@ namespace BnlPlugins.Launcher
                 {
                     string fileVersion = File.ReadAllText(_versionFilePath).Trim();
                     if (!string.IsNullOrEmpty(fileVersion))
-                        installedVersion = fileVersion;
+                    {
+                        if (IsNewerVersion(CurrentVersion, fileVersion))
+                        {
+                            // DLL is newer than what version.txt says — correct it.
+                            installedVersion = CurrentVersion;
+                            File.WriteAllText(_versionFilePath, CurrentVersion);
+                        }
+                        else
+                        {
+                            installedVersion = fileVersion;
+                        }
+                    }
                 }
                 catch { }
             }
-
-            // Write version.txt only if it doesn't exist yet — the installer is
-            // the authority on what release is installed; we must not overwrite it.
-            if (!File.Exists(_versionFilePath))
+            else
             {
                 try { File.WriteAllText(_versionFilePath, CurrentVersion); }
                 catch { }
@@ -567,7 +577,7 @@ namespace BnlPlugins.Launcher
                 {
                     string fileVersion = File.ReadAllText(_versionFilePath).Trim();
                     if (!string.IsNullOrEmpty(fileVersion))
-                        installedVersion = fileVersion;
+                        installedVersion = IsNewerVersion(CurrentVersion, fileVersion) ? CurrentVersion : fileVersion;
                 }
                 catch { }
             }
