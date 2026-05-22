@@ -581,6 +581,38 @@ namespace BnlPlugins.Launcher
             catch { }
 
             string installerPath = Path.Combine(Path.Combine(PluginDir, "Launcher"), "BNL-Installer.exe");
+
+            // Always refresh the local installer from the latest release so the
+            // spawned exe has the full up-to-date plugin list in its manifest.
+            string installerUrl =
+                "https://github.com/" + GitHubRepo + "/releases/latest/download/BNL-Installer.exe";
+            string tempInstaller = installerPath + ".tmp";
+            string? downloadError = null;
+            yield return DownloadUrlToFile(installerUrl, tempInstaller, err => downloadError = err);
+            if (downloadError == null && File.Exists(tempInstaller))
+            {
+                try
+                {
+                    if (File.Exists(installerPath)) File.Delete(installerPath);
+                    File.Move(tempInstaller, installerPath);
+                    Logger.Log(BepInEx.Logging.LogLevel.Info,
+                        "[BNL Launcher] Refreshed local installer from latest release");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log(BepInEx.Logging.LogLevel.Warning,
+                        "[BNL Launcher] Could not replace local installer: " + ex.Message);
+                    try { if (File.Exists(tempInstaller)) File.Delete(tempInstaller); } catch { }
+                }
+            }
+            else
+            {
+                Logger.Log(BepInEx.Logging.LogLevel.Warning,
+                    "[BNL Launcher] Could not refresh installer (" + (downloadError ?? "no file") +
+                    "), using existing copy");
+                try { if (File.Exists(tempInstaller)) File.Delete(tempInstaller); } catch { }
+            }
+
             if (!File.Exists(installerPath))
             {
                 Logger.Log(BepInEx.Logging.LogLevel.Warning,
