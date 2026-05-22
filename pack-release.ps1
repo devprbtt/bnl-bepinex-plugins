@@ -2,7 +2,7 @@
 # The zip mirrors the game folder structure — user just extracts to
 # their BlockNLoad folder and launches through Steam.
 param(
-    [string]$Version = "1.4.0",
+    [string]$Version = "1.4.1",
     [string]$OutputDir = ".\release",
     [string]$GameRoot = ""
 )
