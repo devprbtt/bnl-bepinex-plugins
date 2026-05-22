@@ -51,6 +51,8 @@ namespace BnlPlugins.Misc
     {
         private static readonly FieldInfo? ActiveField = AccessTools.Field(typeof(BuildingBeamEffect), "Active");
         private static readonly MethodInfo? SkipMethod = AccessTools.Method(typeof(GuiLoginIntro), "Skip");
+        private static readonly MethodInfo? FinishWarningMethod = AccessTools.Method(typeof(GuiLoginIntro), "FinishWarning");
+        private static readonly MethodInfo? FinishIntroMethod = AccessTools.Method(typeof(GuiLoginIntro), "FinishIntro");
         private static readonly FieldInfo? IntroFinishedField = AccessTools.Field(typeof(GuiLoginIntro), "introFinished");
         private static readonly FieldInfo? WarningFinishedField = AccessTools.Field(typeof(GuiLoginIntro), "warningFinished");
 
@@ -102,16 +104,11 @@ namespace BnlPlugins.Misc
             if (IntroFinishedField != null && (bool)IntroFinishedField.GetValue(intro))
                 return;
 
-            if (WarningFinishedField != null && IntroFinishedField != null)
-            {
-                bool warningFinished = (bool)WarningFinishedField.GetValue(intro);
-                bool introFinished = (bool)IntroFinishedField.GetValue(intro);
-                if (warningFinished && introFinished)
-                    return;
-            }
-
-            if (SkipMethod != null)
-                SkipMethod.Invoke(intro, null);
+            // Skip both the warning screen and the intro video in one go.
+            if (FinishWarningMethod != null)
+                FinishWarningMethod.Invoke(intro, null);
+            if (FinishIntroMethod != null)
+                FinishIntroMethod.Invoke(intro, null);
         }
     }
 
