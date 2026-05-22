@@ -890,6 +890,42 @@ namespace BnlInstaller
                             "BepInEx/plugins/ConfigurationManager/",
                             "BepInEx/config/com.bepis.bepinex.configurationmanager.cfg"
                         }
+                    },
+                    new ReleaseComponent
+                    {
+                        Id = "fov",
+                        Name = "FOV / ADS",
+                        Description = "Forced camera FOV, ADS sensitivity multiplier, and weapon model FOV.",
+                        Required = false,
+                        Default = false,
+                        Paths = new List<string>
+                        {
+                            "BepInEx/plugins/BnlPlugins.Fov.dll"
+                        }
+                    },
+                    new ReleaseComponent
+                    {
+                        Id = "crosshair",
+                        Name = "Crosshair",
+                        Description = "Crosshair color, size, spread, visibility, and forced-shape overrides.",
+                        Required = false,
+                        Default = false,
+                        Paths = new List<string>
+                        {
+                            "BepInEx/plugins/BnlPlugins.Crosshair.dll"
+                        }
+                    },
+                    new ReleaseComponent
+                    {
+                        Id = "combatnumbers",
+                        Name = "Combat Numbers",
+                        Description = "Damage and healing number styling, combine behavior, and self-heal display controls.",
+                        Required = false,
+                        Default = false,
+                        Paths = new List<string>
+                        {
+                            "BepInEx/plugins/BnlPlugins.CombatNumbers.dll"
+                        }
                     }
                 }
             };
