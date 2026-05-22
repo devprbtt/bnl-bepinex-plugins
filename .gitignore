@@ -7,6 +7,9 @@ tmp_*
 tools/
 bepinex-dist/BepInEx/plugins/
 !bepinex-dist/BepInEx/plugins/ConfigurationManager/
+!bepinex-dist/BepInEx/plugins/Launcher/
+!bepinex-dist/BepInEx/plugins/Launcher/CardTextures/
+!bepinex-dist/BepInEx/plugins/Launcher/CardTextures/*.png
 BnlPlugins.Longshot/
 BnlInstaller/bin/
 BnlInstaller/obj/
