@@ -105,7 +105,7 @@ namespace BnlUninstaller
             int y = 24;
             _chkLauncher = MakeCheckBox("Community launcher plugin (BnlPlugins.Launcher.dll)", y, true); y += 26;
             _chkCardTextures = MakeCheckBox("Launcher card overrides folder (BepInEx\\plugins\\Launcher\\CardTextures)", y, true); y += 26;
-            _chkLauncherConfig = MakeCheckBox("Launcher config and version files", y, true); y += 26;
+            _chkLauncherConfig = MakeCheckBox("Launcher config, version files, and installer exe", y, true); y += 26;
             _chkConfigManager = MakeCheckBox("Configuration Manager plugin", y, false); y += 26;
             _chkBepInExRuntime = MakeCheckBox("BepInEx runtime and Doorstop files (disables all plugins)", y, false);
 
@@ -305,6 +305,9 @@ namespace BnlUninstaller
                     SafeDeleteFile(Path.Combine(bepinexDir, "config", "BnlPlugins.Launcher.cfg"));
                     SafeDeleteFile(Path.Combine(pluginsDir, "Launcher", "version.txt"));
                     SafeDeleteFile(Path.Combine(pluginsDir, "Launcher", "last_check.txt"));
+                    SafeDeleteFile(Path.Combine(pluginsDir, "Launcher", "BNL-Installer.exe"));
+                    SafeDeleteFile(Path.Combine(pluginsDir, "Launcher", "BNL-Installer.next.exe"));
+                    SafeDeleteFile(Path.Combine(pluginsDir, "Launcher", "release-manifest.json"));
                     SafeDeleteDirectoryIfEmpty(Path.Combine(pluginsDir, "Launcher"));
                 }
 
