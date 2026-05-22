@@ -495,27 +495,16 @@ namespace BnlInstaller
 
             try
             {
-                // Find release zip — local first, then GitHub
+                // Always download the latest release zip from GitHub to ensure
+                // we never install from a stale local copy.
                 string tempZip;
-                var scriptDir = AppDomain.CurrentDomain.BaseDirectory;
-                var localZip = Directory.GetFiles(scriptDir, "bnl-bepinex-plugins-v*.zip")
-                    .Select(f => new FileInfo(f))
-                    .OrderByDescending(f => f.LastWriteTime)
-                    .FirstOrDefault();
-
-                if (localZip != null)
-                {
-                    tempZip = localZip.FullName;
-                    _lblStatus.Text = $"Using local: {localZip.Name}";
-                }
-                else
                 {
                     _lblStatus.Text = "Downloading latest release...";
                     Refresh();
 
-                string latestJson;
-                using (var client = new WebClient())
-                {
+                    string latestJson;
+                    using (var client = new WebClient())
+                    {
                         client.Headers.Add("User-Agent", "BNL-Installer");
                         try
                         {
@@ -525,7 +514,7 @@ namespace BnlInstaller
                         catch
                         {
                             throw new Exception(
-                                "Could not reach GitHub. Make sure you're online, or place the release zip next to this installer.\n\n" +
+                                "Could not reach GitHub. Make sure you're online.\n\n" +
                                 $"Download it from: https://github.com/{RepoOwner}/{RepoName}/releases");
                         }
                     }
