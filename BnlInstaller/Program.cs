@@ -1056,7 +1056,7 @@ namespace BnlInstaller
                         Default = true,
                         Paths = new List<string>
                         {
-                            "BepInEx/plugins/BnlPlugins.Launcher.dll",
+                            "BepInEx/plugins/BnlPlugins.Launcher/BnlPlugins.Launcher.dll",
                             "BepInEx/plugins/Launcher/BNL-Installer.exe",
                             "BepInEx/plugins/Launcher/version.txt",
                             ManifestEntryPath
@@ -1099,7 +1099,7 @@ namespace BnlInstaller
                         Default = false,
                         Paths = new List<string>
                         {
-                            "BepInEx/plugins/BnlPlugins.Fov.dll"
+                            "BepInEx/plugins/BnlPlugins.Fov/BnlPlugins.Fov.dll"
                         }
                     },
                     new ReleaseComponent
@@ -1112,7 +1112,7 @@ namespace BnlInstaller
                         Default = false,
                         Paths = new List<string>
                         {
-                            "BepInEx/plugins/BnlPlugins.Crosshair.dll"
+                            "BepInEx/plugins/BnlPlugins.Crosshair/BnlPlugins.Crosshair.dll"
                         }
                     },
                     new ReleaseComponent
@@ -1125,7 +1125,7 @@ namespace BnlInstaller
                         Default = false,
                         Paths = new List<string>
                         {
-                            "BepInEx/plugins/BnlPlugins.CombatNumbers.dll"
+                            "BepInEx/plugins/BnlPlugins.CombatNumbers/BnlPlugins.CombatNumbers.dll"
                         }
                     },
                     new ReleaseComponent
@@ -1138,7 +1138,7 @@ namespace BnlInstaller
                         Default = false,
                         Paths = new List<string>
                         {
-                            "BepInEx/plugins/BnlPlugins.ShieldTimer.dll"
+                            "BepInEx/plugins/BnlPlugins.ShieldTimer/BnlPlugins.ShieldTimer.dll"
                         }
                     },
                     new ReleaseComponent
@@ -1151,7 +1151,7 @@ namespace BnlInstaller
                         Default = false,
                         Paths = new List<string>
                         {
-                            "BepInEx/plugins/BnlPlugins.BuildPreview.dll"
+                            "BepInEx/plugins/BnlPlugins.BuildPreview/BnlPlugins.BuildPreview.dll"
                         }
                     },
                     new ReleaseComponent
@@ -1164,7 +1164,7 @@ namespace BnlInstaller
                         Default = false,
                         Paths = new List<string>
                         {
-                            "BepInEx/plugins/BnlPlugins.AimHealthbar.dll"
+                            "BepInEx/plugins/BnlPlugins.AimHealthbar/BnlPlugins.AimHealthbar.dll"
                         }
                     },
                     new ReleaseComponent
@@ -1177,7 +1177,7 @@ namespace BnlInstaller
                         Default = false,
                         Paths = new List<string>
                         {
-                            "BepInEx/plugins/BnlPlugins.DeathCamHp.dll"
+                            "BepInEx/plugins/BnlPlugins.DeathCamHp/BnlPlugins.DeathCamHp.dll"
                         }
                     },
                     new ReleaseComponent
@@ -1190,7 +1190,7 @@ namespace BnlInstaller
                         Default = false,
                         Paths = new List<string>
                         {
-                            "BepInEx/plugins/BnlPlugins.AutoQueue.dll"
+                            "BepInEx/plugins/BnlPlugins.AutoQueue/BnlPlugins.AutoQueue.dll"
                         }
                     },
                     new ReleaseComponent
@@ -1203,7 +1203,7 @@ namespace BnlInstaller
                         Default = false,
                         Paths = new List<string>
                         {
-                            "BepInEx/plugins/BnlPlugins.LowHpAlert.dll"
+                            "BepInEx/plugins/BnlPlugins.LowHpAlert/BnlPlugins.LowHpAlert.dll"
                         }
                     },
                     new ReleaseComponent
@@ -1216,7 +1216,7 @@ namespace BnlInstaller
                         Default = false,
                         Paths = new List<string>
                         {
-                            "BepInEx/plugins/BnlPlugins.AutoCrouch.dll"
+                            "BepInEx/plugins/BnlPlugins.AutoCrouch/BnlPlugins.AutoCrouch.dll"
                         }
                     },
                     new ReleaseComponent
@@ -1229,7 +1229,7 @@ namespace BnlInstaller
                         Default = false,
                         Paths = new List<string>
                         {
-                            "BepInEx/plugins/BnlPlugins.TeammateHp.dll"
+                            "BepInEx/plugins/BnlPlugins.TeammateHp/BnlPlugins.TeammateHp.dll"
                         }
                     },
                     new ReleaseComponent
@@ -1242,7 +1242,7 @@ namespace BnlInstaller
                         Default = false,
                         Paths = new List<string>
                         {
-                            "BepInEx/plugins/BnlPlugins.ImpactVfx.dll"
+                            "BepInEx/plugins/BnlPlugins.ImpactVfx/BnlPlugins.ImpactVfx.dll"
                         }
                     },
                     new ReleaseComponent
@@ -1255,7 +1255,7 @@ namespace BnlInstaller
                         Default = false,
                         Paths = new List<string>
                         {
-                            "BepInEx/plugins/BnlPlugins.UnitGuiWsiScale.dll"
+                            "BepInEx/plugins/BnlPlugins.UnitGuiWsiScale/BnlPlugins.UnitGuiWsiScale.dll"
                         }
                     },
                     new ReleaseComponent
@@ -1268,7 +1268,7 @@ namespace BnlInstaller
                         Default = false,
                         Paths = new List<string>
                         {
-                            "BepInEx/plugins/BnlPlugins.MapRender.dll"
+                            "BepInEx/plugins/BnlPlugins.MapRender/BnlPlugins.MapRender.dll"
                         }
                     },
                     new ReleaseComponent
@@ -1281,7 +1281,20 @@ namespace BnlInstaller
                         Default = false,
                         Paths = new List<string>
                         {
-                            "BepInEx/plugins/BnlPlugins.Misc.dll"
+                            "BepInEx/plugins/BnlPlugins.Misc/BnlPlugins.Misc.dll"
+                        }
+                    },
+                    new ReleaseComponent
+                    {
+                        Id = "teamcolors",
+                        Name = "Team Colors",
+                        Version = "0.1.0",
+                        Description = "Override friendly, enemy, and background team colors with presets or custom hex values.",
+                        Required = false,
+                        Default = false,
+                        Paths = new List<string>
+                        {
+                            "BepInEx/plugins/BnlPlugins.TeamColors/BnlPlugins.TeamColors.dll"
                         }
                     }
                 }

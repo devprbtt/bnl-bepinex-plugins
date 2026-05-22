@@ -291,7 +291,21 @@ namespace BnlUninstaller
 
                 if (_chkLauncher.Checked)
                 {
-                    SafeDeleteFile(Path.Combine(pluginsDir, "BnlPlugins.Launcher.dll"));
+                    string[] pluginNames = {
+                        "BnlPlugins.Launcher", "BnlPlugins.Fov", "BnlPlugins.Crosshair",
+                        "BnlPlugins.CombatNumbers", "BnlPlugins.ShieldTimer", "BnlPlugins.BuildPreview",
+                        "BnlPlugins.AimHealthbar", "BnlPlugins.DeathCamHp", "BnlPlugins.AutoQueue",
+                        "BnlPlugins.LowHpAlert", "BnlPlugins.AutoCrouch", "BnlPlugins.TeammateHp",
+                        "BnlPlugins.ImpactVfx", "BnlPlugins.UnitGuiWsiScale", "BnlPlugins.MapRender",
+                        "BnlPlugins.Misc", "BnlPlugins.TeamColors"
+                    };
+                    foreach (var name in pluginNames)
+                    {
+                        // New layout: subfolder per plugin
+                        SafeDeleteDirectory(Path.Combine(pluginsDir, name));
+                        // Old layout: flat DLL directly in plugins/
+                        SafeDeleteFile(Path.Combine(pluginsDir, name + ".dll"));
+                    }
                 }
 
                 if (_chkCardTextures.Checked)

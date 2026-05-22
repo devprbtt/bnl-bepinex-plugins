@@ -5,8 +5,11 @@ Directory.Build.props.user
 .vs/
 tmp_*
 tools/
-bepinex-dist/BepInEx/plugins/
+bepinex-dist/BepInEx/plugins/**
+!bepinex-dist/BepInEx/plugins/BnlPlugins.Launcher/
+!bepinex-dist/BepInEx/plugins/BnlPlugins.Launcher/**
 !bepinex-dist/BepInEx/plugins/ConfigurationManager/
+!bepinex-dist/BepInEx/plugins/ConfigurationManager/**
 !bepinex-dist/BepInEx/plugins/Launcher/
 !bepinex-dist/BepInEx/plugins/Launcher/CardTextures/
 !bepinex-dist/BepInEx/plugins/Launcher/CardTextures/*.png

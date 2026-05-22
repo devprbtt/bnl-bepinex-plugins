@@ -241,7 +241,7 @@ By default it removes only the community launcher files, so other WIP plugins ca
 At minimum, delete:
 
 ```
-BlockNLoad\Win64\BepInEx\plugins\BnlPlugins.Launcher.dll
+BlockNLoad\Win64\BepInEx\plugins\BnlPlugins.Launcher\
 BlockNLoad\Win64\BepInEx\plugins\Launcher\
 BlockNLoad\Win64\BepInEx\config\BnlPlugins.Launcher.cfg
 ```

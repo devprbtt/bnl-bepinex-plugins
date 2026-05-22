@@ -192,6 +192,7 @@ $zipPath = Join-Path $OutputDir $zipName
 if (Test-Path $staging) { Remove-Item $staging -Recurse -Force }
 New-Item -ItemType Directory -Path (Join-Path $staging "Win64\BepInEx\config") -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $staging "Win64\BepInEx\core") -Force | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $staging "Win64\BepInEx\plugins\BnlPlugins.Launcher") -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $staging "Win64\BepInEx\plugins\Launcher\CardTextures") -Force | Out-Null
 
 # Copy Doorstop files (go in Win64/)
@@ -207,56 +208,34 @@ Copy-Item "$workspace\bepinex-dist\BepInEx\core\*" (Join-Path $staging "Win64\Be
 Copy-Item "$workspace\bepinex-dist\BepInEx\config\BepInEx.cfg" (Join-Path $staging "Win64\BepInEx\config")
 Copy-Item "$workspace\bepinex-dist\BepInEx\config\com.bepis.bepinex.configurationmanager.cfg" (Join-Path $staging "Win64\BepInEx\config") -ErrorAction SilentlyContinue
 
-# Copy built plugin DLL
-Copy-Item "$workspace\BnlPlugins.Launcher\bin\Release\net35\BnlPlugins.Launcher.dll" (Join-Path $staging "Win64\BepInEx\plugins")
+# Copy built plugin DLLs — each into its own subfolder
+Copy-Item "$workspace\BnlPlugins.Launcher\bin\Release\net35\BnlPlugins.Launcher.dll" (Join-Path $staging "Win64\BepInEx\plugins\BnlPlugins.Launcher")
 Copy-Item "$workspace\BnlInstaller\bin\Release\net472\BNL-Installer.exe" (Join-Path $staging "Win64\BepInEx\plugins\Launcher\BNL-Installer.exe")
-if (Test-Path $fovDll) {
-    Copy-Item $fovDll (Join-Path $staging "Win64\BepInEx\plugins")
-}
-if (Test-Path $crosshairDll) {
-    Copy-Item $crosshairDll (Join-Path $staging "Win64\BepInEx\plugins")
-}
-if (Test-Path $combatNumbersDll) {
-    Copy-Item $combatNumbersDll (Join-Path $staging "Win64\BepInEx\plugins")
-}
-if (Test-Path $shieldTimerDll) {
-    Copy-Item $shieldTimerDll (Join-Path $staging "Win64\BepInEx\plugins")
-}
-if (Test-Path $buildPreviewDll) {
-    Copy-Item $buildPreviewDll (Join-Path $staging "Win64\BepInEx\plugins")
-}
-if (Test-Path $aimHealthbarDll) {
-    Copy-Item $aimHealthbarDll (Join-Path $staging "Win64\BepInEx\plugins")
-}
-if (Test-Path $deathCamHpDll) {
-    Copy-Item $deathCamHpDll (Join-Path $staging "Win64\BepInEx\plugins")
-}
-if (Test-Path $autoQueueDll) {
-    Copy-Item $autoQueueDll (Join-Path $staging "Win64\BepInEx\plugins")
-}
-if (Test-Path $lowHpAlertDll) {
-    Copy-Item $lowHpAlertDll (Join-Path $staging "Win64\BepInEx\plugins")
-}
-if (Test-Path $autoCrouchDll) {
-    Copy-Item $autoCrouchDll (Join-Path $staging "Win64\BepInEx\plugins")
-}
-if (Test-Path $teammateHpDll) {
-    Copy-Item $teammateHpDll (Join-Path $staging "Win64\BepInEx\plugins")
-}
-if (Test-Path $impactVfxDll) {
-    Copy-Item $impactVfxDll (Join-Path $staging "Win64\BepInEx\plugins")
-}
-if (Test-Path $unitGuiWsiScaleDll) {
-    Copy-Item $unitGuiWsiScaleDll (Join-Path $staging "Win64\BepInEx\plugins")
-}
-if (Test-Path $mapRenderDll) {
-    Copy-Item $mapRenderDll (Join-Path $staging "Win64\BepInEx\plugins")
-}
-if (Test-Path $miscDll) {
-    Copy-Item $miscDll (Join-Path $staging "Win64\BepInEx\plugins")
-}
-if (Test-Path $teamColorsDll) {
-    Copy-Item $teamColorsDll (Join-Path $staging "Win64\BepInEx\plugins")
+
+$optionalPlugins = @(
+    @{ Dll = $fovDll;            Folder = "BnlPlugins.Fov" },
+    @{ Dll = $crosshairDll;      Folder = "BnlPlugins.Crosshair" },
+    @{ Dll = $combatNumbersDll;  Folder = "BnlPlugins.CombatNumbers" },
+    @{ Dll = $shieldTimerDll;    Folder = "BnlPlugins.ShieldTimer" },
+    @{ Dll = $buildPreviewDll;   Folder = "BnlPlugins.BuildPreview" },
+    @{ Dll = $aimHealthbarDll;   Folder = "BnlPlugins.AimHealthbar" },
+    @{ Dll = $deathCamHpDll;     Folder = "BnlPlugins.DeathCamHp" },
+    @{ Dll = $autoQueueDll;      Folder = "BnlPlugins.AutoQueue" },
+    @{ Dll = $lowHpAlertDll;     Folder = "BnlPlugins.LowHpAlert" },
+    @{ Dll = $autoCrouchDll;     Folder = "BnlPlugins.AutoCrouch" },
+    @{ Dll = $teammateHpDll;     Folder = "BnlPlugins.TeammateHp" },
+    @{ Dll = $impactVfxDll;      Folder = "BnlPlugins.ImpactVfx" },
+    @{ Dll = $unitGuiWsiScaleDll; Folder = "BnlPlugins.UnitGuiWsiScale" },
+    @{ Dll = $mapRenderDll;      Folder = "BnlPlugins.MapRender" },
+    @{ Dll = $miscDll;           Folder = "BnlPlugins.Misc" },
+    @{ Dll = $teamColorsDll;     Folder = "BnlPlugins.TeamColors" }
+)
+foreach ($p in $optionalPlugins) {
+    if (Test-Path $p.Dll) {
+        $dest = Join-Path $staging "Win64\BepInEx\plugins\$($p.Folder)"
+        New-Item -ItemType Directory -Path $dest -Force | Out-Null
+        Copy-Item $p.Dll $dest
+    }
 }
 
 # Copy Configuration Manager (in-game settings menu, F1)
@@ -297,7 +276,7 @@ $manifestComponents = @(
         required = $true
         default = $true
         paths = @(
-            "BepInEx/plugins/BnlPlugins.Launcher.dll",
+            "BepInEx/plugins/BnlPlugins.Launcher/BnlPlugins.Launcher.dll",
             "BepInEx/plugins/Launcher/BNL-Installer.exe",
             "BepInEx/plugins/Launcher/version.txt",
             "BepInEx/plugins/Launcher/release-manifest.json"
@@ -337,7 +316,7 @@ if (Test-Path $fovDll) {
         required = $false
         default = $false
         paths = @(
-            "BepInEx/plugins/BnlPlugins.Fov.dll"
+            "BepInEx/plugins/BnlPlugins.Fov/BnlPlugins.Fov.dll"
         )
     }
 }
@@ -351,7 +330,7 @@ if (Test-Path $crosshairDll) {
         required = $false
         default = $false
         paths = @(
-            "BepInEx/plugins/BnlPlugins.Crosshair.dll"
+            "BepInEx/plugins/BnlPlugins.Crosshair/BnlPlugins.Crosshair.dll"
         )
     }
 }
@@ -365,7 +344,7 @@ if (Test-Path $combatNumbersDll) {
         required = $false
         default = $false
         paths = @(
-            "BepInEx/plugins/BnlPlugins.CombatNumbers.dll"
+            "BepInEx/plugins/BnlPlugins.CombatNumbers/BnlPlugins.CombatNumbers.dll"
         )
     }
 }
@@ -379,7 +358,7 @@ if (Test-Path $shieldTimerDll) {
         required = $false
         default = $false
         paths = @(
-            "BepInEx/plugins/BnlPlugins.ShieldTimer.dll"
+            "BepInEx/plugins/BnlPlugins.ShieldTimer/BnlPlugins.ShieldTimer.dll"
         )
     }
 }
@@ -393,7 +372,7 @@ if (Test-Path $buildPreviewDll) {
         required = $false
         default = $false
         paths = @(
-            "BepInEx/plugins/BnlPlugins.BuildPreview.dll"
+            "BepInEx/plugins/BnlPlugins.BuildPreview/BnlPlugins.BuildPreview.dll"
         )
     }
 }
@@ -407,7 +386,7 @@ if (Test-Path $aimHealthbarDll) {
         required = $false
         default = $false
         paths = @(
-            "BepInEx/plugins/BnlPlugins.AimHealthbar.dll"
+            "BepInEx/plugins/BnlPlugins.AimHealthbar/BnlPlugins.AimHealthbar.dll"
         )
     }
 }
@@ -421,7 +400,7 @@ if (Test-Path $deathCamHpDll) {
         required = $false
         default = $false
         paths = @(
-            "BepInEx/plugins/BnlPlugins.DeathCamHp.dll"
+            "BepInEx/plugins/BnlPlugins.DeathCamHp/BnlPlugins.DeathCamHp.dll"
         )
     }
 }
@@ -435,7 +414,7 @@ if (Test-Path $autoQueueDll) {
         required = $false
         default = $false
         paths = @(
-            "BepInEx/plugins/BnlPlugins.AutoQueue.dll"
+            "BepInEx/plugins/BnlPlugins.AutoQueue/BnlPlugins.AutoQueue.dll"
         )
     }
 }
@@ -449,7 +428,7 @@ if (Test-Path $lowHpAlertDll) {
         required = $false
         default = $false
         paths = @(
-            "BepInEx/plugins/BnlPlugins.LowHpAlert.dll"
+            "BepInEx/plugins/BnlPlugins.LowHpAlert/BnlPlugins.LowHpAlert.dll"
         )
     }
 }
@@ -463,7 +442,7 @@ if (Test-Path $autoCrouchDll) {
         required = $false
         default = $false
         paths = @(
-            "BepInEx/plugins/BnlPlugins.AutoCrouch.dll"
+            "BepInEx/plugins/BnlPlugins.AutoCrouch/BnlPlugins.AutoCrouch.dll"
         )
     }
 }
@@ -477,7 +456,7 @@ if (Test-Path $teammateHpDll) {
         required = $false
         default = $false
         paths = @(
-            "BepInEx/plugins/BnlPlugins.TeammateHp.dll"
+            "BepInEx/plugins/BnlPlugins.TeammateHp/BnlPlugins.TeammateHp.dll"
         )
     }
 }
@@ -491,7 +470,7 @@ if (Test-Path $impactVfxDll) {
         required = $false
         default = $false
         paths = @(
-            "BepInEx/plugins/BnlPlugins.ImpactVfx.dll"
+            "BepInEx/plugins/BnlPlugins.ImpactVfx/BnlPlugins.ImpactVfx.dll"
         )
     }
 }
@@ -505,7 +484,7 @@ if (Test-Path $unitGuiWsiScaleDll) {
         required = $false
         default = $false
         paths = @(
-            "BepInEx/plugins/BnlPlugins.UnitGuiWsiScale.dll"
+            "BepInEx/plugins/BnlPlugins.UnitGuiWsiScale/BnlPlugins.UnitGuiWsiScale.dll"
         )
     }
 }
@@ -519,7 +498,7 @@ if (Test-Path $mapRenderDll) {
         required = $false
         default = $false
         paths = @(
-            "BepInEx/plugins/BnlPlugins.MapRender.dll"
+            "BepInEx/plugins/BnlPlugins.MapRender/BnlPlugins.MapRender.dll"
         )
     }
 }
@@ -533,7 +512,7 @@ if (Test-Path $teamColorsDll) {
         required = $false
         default = $false
         paths = @(
-            "BepInEx/plugins/BnlPlugins.TeamColors.dll"
+            "BepInEx/plugins/BnlPlugins.TeamColors/BnlPlugins.TeamColors.dll"
         )
     }
 }
@@ -547,7 +526,7 @@ if (Test-Path $miscDll) {
         required = $false
         default = $false
         paths = @(
-            "BepInEx/plugins/BnlPlugins.Misc.dll"
+            "BepInEx/plugins/BnlPlugins.Misc/BnlPlugins.Misc.dll"
         )
     }
 }
