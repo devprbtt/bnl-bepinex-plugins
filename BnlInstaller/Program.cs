@@ -562,7 +562,6 @@ namespace BnlInstaller
                 }
 
                 ReleaseManifest manifest = LoadManifestFromZip(tempZip) ?? _defaultManifest;
-                ApplyOptionalComponentsToUi(manifest, gamePath);
                 var selectedComponents = BuildSelectedComponentSet(manifest);
                 if (!UiCoversManifestOptionalComponents(manifest) &&
                     !PromptForAdditionalOptionalComponents(manifest, selectedComponents, gamePath))
