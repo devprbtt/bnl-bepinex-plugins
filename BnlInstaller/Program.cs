@@ -232,6 +232,7 @@ namespace BnlInstaller
                 File.Exists(Path.Combine(_initialGamePath, "Win64", "BlockNLoad.exe")))
             {
                 _txtPath.Text = _initialGamePath;
+                ApplyOptionalComponentsToUi(_defaultManifest, _txtPath.Text.Trim());
                 TryPopulateOptionalComponentsFromLocalZip();
                 return;
             }
@@ -245,6 +246,7 @@ namespace BnlInstaller
                 _lblStatus.Text = "Could not auto-detect game folder. Click Browse.";
             }
 
+            ApplyOptionalComponentsToUi(_defaultManifest, _txtPath.Text.Trim());
             TryPopulateOptionalComponentsFromLocalZip();
         }
 
@@ -320,6 +322,7 @@ namespace BnlInstaller
                 if (dialog.ShowDialog() == DialogResult.OK)
                 {
                     _txtPath.Text = dialog.SelectedPath;
+                    ApplyOptionalComponentsToUi(_defaultManifest, _txtPath.Text.Trim());
                     TryPopulateOptionalComponentsFromLocalZip();
                 }
             }

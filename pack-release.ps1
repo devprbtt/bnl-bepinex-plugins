@@ -2,7 +2,7 @@
 # The zip mirrors the game folder structure — user just extracts to
 # their BlockNLoad folder and launches through Steam.
 param(
-    [string]$Version = "1.3.4",
+    [string]$Version = "1.3.5",
     [string]$OutputDir = ".\release",
     [string]$GameRoot = ""
 )
@@ -245,5 +245,6 @@ Write-Host "Upload both to GitHub Releases. Users can either:"
 Write-Host "  1. Run BNL-Installer.exe (auto-detect + GUI, no dependencies)"
 Write-Host "  2. Run BNL-Uninstaller.exe to remove launcher files"
 Write-Host "  3. Extract the zip manually"
+
 
 
