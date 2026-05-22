@@ -2,8 +2,8 @@
 
   <PropertyGroup>
     <TargetFramework>net35</TargetFramework>
-    <AssemblyName>BnlPlugins.Fov</AssemblyName>
-    <RootNamespace>BnlPlugins.Fov</RootNamespace>
+    <AssemblyName>BnlPlugins.AutoQueue</AssemblyName>
+    <RootNamespace>BnlPlugins.AutoQueue</RootNamespace>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>None</ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>
@@ -30,6 +30,9 @@
   <Target Name="AddGameRefsAfterResolve" AfterTargets="ResolveAssemblyReferences">
     <ItemGroup>
       <ReferencePath Include="$(UnityManagedDir)\UnityEngine.dll">
+        <Private>false</Private>
+      </ReferencePath>
+      <ReferencePath Include="$(UnityManagedDir)\UnityEngine.UI.dll">
         <Private>false</Private>
       </ReferencePath>
       <ReferencePath Include="$(GameManagedDir)\Assembly-CSharp.dll">

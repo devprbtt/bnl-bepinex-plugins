@@ -16,4 +16,8 @@
     <Reference Include="System.IO.Compression.FileSystem" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="assets\**\*" />
+  </ItemGroup>
+
 </Project>

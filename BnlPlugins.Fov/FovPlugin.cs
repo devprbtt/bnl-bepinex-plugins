@@ -27,13 +27,18 @@ namespace BnlPlugins.Fov
             Instance = this;
 
             Enabled = Config.Bind("FOV", "Enabled", true,
-                "Enable forced first-person FOV, ADS sensitivity multiplier, and weapon model FOV overrides.");
+                new ConfigDescription("Enable forced first-person FOV, ADS sensitivity multiplier, and weapon model FOV overrides.", null,
+                    new ConfigurationManagerAttributes { Order = 100 }));
             ForcedFov = Config.Bind("FOV", "Fov", 100f,
-                new ConfigDescription("Forced first-person camera FOV.", new AcceptableValueRange<float>(60f, 150f)));
+                FloatConfig.Range("Forced first-person camera FOV.", 60f, 150f, 99));
             AdsSensitivityMultiplier = Config.Bind("FOV", "AdsSensitivityMultiplier", 1f,
-                new ConfigDescription("Multiplier applied to mouse sensitivity while aiming.", new AcceptableValueRange<float>(0.1f, 4f)));
+                FloatConfig.Range("Multiplier applied to mouse sensitivity while aiming.", 0.1f, 4f, 98));
             WeaponModelFov = Config.Bind("FOV", "WeaponModelFov", 20f,
-                new ConfigDescription("Weapon model / arms camera FOV.", new AcceptableValueRange<float>(10f, 120f)));
+                FloatConfig.Range("Weapon model / arms camera FOV.", 10f, 120f, 97));
+
+            FloatConfig.BindRound(ForcedFov, 60f, 150f);
+            FloatConfig.BindRound(AdsSensitivityMultiplier, 0.1f, 4f);
+            FloatConfig.BindRound(WeaponModelFov, 10f, 120f);
 
             _harmony = new Harmony(HarmonyId);
             _harmony.PatchAll(typeof(FovPlugin).Assembly);

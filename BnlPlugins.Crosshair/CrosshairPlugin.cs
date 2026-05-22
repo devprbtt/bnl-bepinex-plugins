@@ -36,27 +36,35 @@ namespace BnlPlugins.Crosshair
             Instance = this;
             Log = Logger;
             Enabled = Config.Bind("Crosshair", "Enabled", true,
-                "Enable crosshair overrides.");
+                new ConfigDescription("Enable crosshair overrides.", null,
+                    new ConfigurationManagerAttributes { Order = 100 }));
             IdleColorHex = Config.Bind("Crosshair", "IdleColor", "#FFFFFF",
-                CreateColorDescription("Crosshair color when not targeting an enemy.", 90, "Idle Color"));
+                CreateColorDescription("Crosshair color when not targeting an enemy.", 99, "Idle Color"));
             FullDamageColorHex = Config.Bind("Crosshair", "FullDamageColor", "#FF0000",
-                CreateColorDescription("Crosshair color when target is inside full damage range.", 89, "Full Damage Color"));
+                CreateColorDescription("Crosshair color when target is inside full damage range.", 98, "Full Damage Color"));
             BelowMaxColorHex = Config.Bind("Crosshair", "BelowMaxColor", "#FF0000",
-                CreateColorDescription("Crosshair color when target is beyond full damage but still in max range.", 88, "Below Max Color"));
+                CreateColorDescription("Crosshair color when target is beyond full damage but still in max range.", 97, "Below Max Color"));
             BrightnessMultiplier = Config.Bind("Crosshair", "BrightnessMultiplier", 1f,
-                new ConfigDescription("Brightness multiplier applied to all crosshair colors.", new AcceptableValueRange<float>(0.1f, 4f)));
+                FloatConfig.Range("Brightness multiplier applied to all crosshair colors.", 0.1f, 4f, 96));
             SizeMultiplier = Config.Bind("Crosshair", "SizeMultiplier", 1f,
-                new ConfigDescription("Crosshair size multiplier.", new AcceptableValueRange<float>(0.25f, 4f)));
+                FloatConfig.Range("Crosshair size multiplier.", 0.25f, 4f, 95));
             SpreadMultiplier = Config.Bind("Crosshair", "SpreadMultiplier", 1f,
-                new ConfigDescription("Crosshair spread multiplier.", new AcceptableValueRange<float>(0.25f, 4f)));
+                FloatConfig.Range("Crosshair spread multiplier.", 0.25f, 4f, 94));
             Alpha = Config.Bind("Crosshair", "Alpha", 1f,
-                new ConfigDescription("Crosshair alpha multiplier.", new AcceptableValueRange<float>(0.05f, 1f)));
+                FloatConfig.Range("Crosshair alpha multiplier.", 0.05f, 1f, 93));
             ForceShape = Config.Bind("Crosshair", "ForceShape", "__DEFAULT__",
-                new ConfigDescription("Force crosshair shape.", new AcceptableValueList<string>(AllowedShapes)));
+                new ConfigDescription("Force crosshair shape.", new AcceptableValueList<string>(AllowedShapes), new ConfigurationManagerAttributes { Order = 92 }));
             ForceShowInAds = Config.Bind("Crosshair", "ForceShowInAds", false,
-                "Force the crosshair to stay visible while aiming down sights.");
+                new ConfigDescription("Force the crosshair to stay visible while aiming down sights.", null,
+                    new ConfigurationManagerAttributes { Order = 91 }));
             HideCrosshair = Config.Bind("Crosshair", "HideCrosshair", false,
-                "Hide the crosshair entirely.");
+                new ConfigDescription("Hide the crosshair entirely.", null,
+                    new ConfigurationManagerAttributes { Order = 90 }));
+
+            FloatConfig.BindRound(BrightnessMultiplier, 0.1f, 4f);
+            FloatConfig.BindRound(SizeMultiplier, 0.25f, 4f);
+            FloatConfig.BindRound(SpreadMultiplier, 0.25f, 4f);
+            FloatConfig.BindRound(Alpha, 0.05f, 1f);
 
             _harmony = new Harmony(HarmonyId);
             _harmony.PatchAll(typeof(CrosshairPlugin).Assembly);
@@ -73,7 +81,7 @@ namespace BnlPlugins.Crosshair
         {
             return new ConfigDescription(description, null, new ConfigurationManagerAttributes
             {
-                CustomDrawer = CrosshairColorDrawer.Draw,
+                CustomDrawer = ColorDrawer.Draw,
                 Order = order,
                 DispName = displayName,
                 DefaultValue = "#FFFFFF"
@@ -365,252 +373,9 @@ namespace BnlPlugins.Crosshair
         }
     }
 
-    internal static class CrosshairColorDrawer
-    {
-        private sealed class PresetColor
-        {
-            public string Name = string.Empty;
-            public Color Color;
-        }
-
-        // Per-entry text buffer so partial input isn't clobbered by other controls.
-        private static readonly Dictionary<ConfigEntryBase, string> _editBuffer
-            = new Dictionary<ConfigEntryBase, string>();
-
-        private static GUIStyle? _presetButtonStyle;
-        private static readonly PresetColor[] Presets =
-        {
-            new PresetColor { Name = "White", Color = new Color(1f, 1f, 1f, 1f) },
-            new PresetColor { Name = "Black", Color = new Color(0f, 0f, 0f, 1f) },
-            new PresetColor { Name = "Red", Color = new Color(1f, 0f, 0f, 1f) },
-            new PresetColor { Name = "Green", Color = new Color(0f, 1f, 0f, 1f) },
-            new PresetColor { Name = "Blue", Color = new Color(0f, 0.6f, 1f, 1f) },
-            new PresetColor { Name = "Yellow", Color = new Color(1f, 1f, 0f, 1f) },
-            new PresetColor { Name = "Orange", Color = new Color(1f, 0.5f, 0f, 1f) },
-            new PresetColor { Name = "Magenta", Color = new Color(1f, 0f, 1f, 1f) },
-            new PresetColor { Name = "Cyan", Color = new Color(0f, 1f, 1f, 1f) },
-            new PresetColor { Name = "Purple", Color = new Color(0.6f, 0.2f, 1f, 1f) },
-            new PresetColor { Name = "Pink", Color = new Color(1f, 0.75f, 0.8f, 1f) },
-            new PresetColor { Name = "Gray", Color = new Color(0.6f, 0.6f, 0.6f, 1f) }
-        };
-
-        internal static void Draw(ConfigEntryBase entry)
-        {
-            string stored = entry.BoxedValue as string ?? "#FFFFFFFF";
-            string controlName = "bnl_hex_" + entry.GetHashCode();
-            bool isFocused = GUI.GetNameOfFocusedControl() == controlName;
-
-            // While the field is focused, show the live buffer so typing is visible.
-            // When not focused, sync buffer to stored so external changes (presets, slider) show up.
-            string bufferValue;
-            if (!_editBuffer.TryGetValue(entry, out bufferValue) || !isFocused)
-            {
-                bufferValue = stored;
-                _editBuffer[entry] = stored;
-            }
-
-            Color color;
-            if (!TryParseHexColor(bufferValue, out color) && !TryParseHexColor(stored, out color))
-                color = Color.white;
-
-            GUILayout.BeginVertical(GUILayout.ExpandWidth(true));
-
-            GUI.SetNextControlName(controlName);
-            string typed = GUILayout.TextField(bufferValue, GUILayout.ExpandWidth(true));
-            if (!string.Equals(typed, bufferValue, StringComparison.Ordinal))
-            {
-                _editBuffer[entry] = typed;
-                Color parsed;
-                if (TryParseHexColor(typed, out parsed))
-                {
-                    entry.BoxedValue = ToHexString(parsed);
-                    GUI.changed = true;
-                }
-            }
-
-            // Preview box row.
-            GUILayout.BeginHorizontal(GUILayout.ExpandWidth(true));
-            DrawPreviewBox(new Color(color.r, color.g, color.b, 1f));
-            GUILayout.FlexibleSpace();
-            GUILayout.EndHorizontal();
-
-            DrawPresets(entry, color);
-
-            // Alpha slider — only applies when stored is valid; skip while typing.
-            Color storedColor;
-            if (!isFocused && TryParseHexColor(stored, out storedColor))
-            {
-                float alpha = DrawChannel("A", storedColor.a);
-                string updatedHex = ToHexString(new Color(storedColor.r, storedColor.g, storedColor.b, alpha));
-                if (!string.Equals(updatedHex, stored, StringComparison.OrdinalIgnoreCase))
-                {
-                    entry.BoxedValue = updatedHex;
-                    _editBuffer[entry] = updatedHex;
-                    GUI.changed = true;
-                }
-            }
-            else if (isFocused)
-            {
-                // Show the slider as read-only while typing so layout stays stable.
-                DrawChannel("A", color.a);
-            }
-
-            GUILayout.EndVertical();
-        }
-
-        private static void DrawPreviewBox(Color color)
-        {
-            Rect rect = GUILayoutUtility.GetRect(26f, 18f, GUILayout.Width(26f), GUILayout.Height(18f));
-            DrawColorRect(rect, color, true);
-        }
-
-        private static void DrawPresets(ConfigEntryBase entry, Color current)
-        {
-            const int columns = 3;
-            GUIStyle style = GetPresetButtonStyle();
-            for (int i = 0; i < Presets.Length; i += columns)
-            {
-                GUILayout.BeginHorizontal(GUILayout.ExpandWidth(true));
-                for (int j = i; j < i + columns && j < Presets.Length; j++)
-                {
-                    var preset = Presets[j];
-                    Color oldBackground = GUI.backgroundColor;
-                    Color oldContent = GUI.contentColor;
-                    GUI.backgroundColor = ApproximatelyEqual(current, preset.Color) ? new Color(0.22f, 0.22f, 0.22f, 1f) : GUI.backgroundColor;
-                    GUI.contentColor = preset.Color;
-                    if (GUILayout.Button(preset.Name, style, GUILayout.Width(72f), GUILayout.Height(20f)))
-                    {
-                        string newHex = ToHexString(new Color(preset.Color.r, preset.Color.g, preset.Color.b, current.a));
-                        entry.BoxedValue = newHex;
-                        _editBuffer[entry] = newHex;
-                        GUI.FocusControl(null);
-                        GUI.changed = true;
-                    }
-                    GUI.backgroundColor = oldBackground;
-                    GUI.contentColor = oldContent;
-                }
-                GUILayout.EndHorizontal();
-            }
-        }
-
-        private static float DrawChannel(string label, float value)
-        {
-            GUILayout.BeginHorizontal(GUILayout.ExpandWidth(true));
-            GUILayout.Label(label, GUILayout.Width(14f));
-            float result = GUILayout.HorizontalSlider(value, 0f, 1f, GUILayout.ExpandWidth(true));
-            GUILayout.Label(Mathf.RoundToInt(result * 255f).ToString(), GUILayout.Width(36f));
-            GUILayout.EndHorizontal();
-            return result;
-        }
-
-        private static string NormalizeHex(string text, Color fallback)
-        {
-            Color parsed;
-            return TryParseHexColor(text, out parsed) ? ToHexString(parsed) : ToHexString(fallback);
-        }
-
-        private static string ToHexString(Color color)
-        {
-            int r = Mathf.Clamp(Mathf.RoundToInt(color.r * 255f), 0, 255);
-            int g = Mathf.Clamp(Mathf.RoundToInt(color.g * 255f), 0, 255);
-            int b = Mathf.Clamp(Mathf.RoundToInt(color.b * 255f), 0, 255);
-            int a = Mathf.Clamp(Mathf.RoundToInt(color.a * 255f), 0, 255);
-            return string.Format("#{0:X2}{1:X2}{2:X2}{3:X2}", r, g, b, a);
-        }
-
-        private static bool TryParseHexColor(string value, out Color color)
-        {
-            color = Color.white;
-            if (string.IsNullOrEmpty(value))
-                return false;
-
-            string hex = value.Trim();
-            if (hex.StartsWith("#"))
-                hex = hex.Substring(1);
-
-            if (hex.Length != 6 && hex.Length != 8)
-                return false;
-
-            byte r;
-            byte g;
-            byte b;
-            byte a = 255;
-            if (!TryParseHexByte(hex.Substring(0, 2), out r) ||
-                !TryParseHexByte(hex.Substring(2, 2), out g) ||
-                !TryParseHexByte(hex.Substring(4, 2), out b))
-            {
-                return false;
-            }
-
-            if (hex.Length == 8 && !TryParseHexByte(hex.Substring(6, 2), out a))
-                return false;
-
-            color = new Color(r / 255f, g / 255f, b / 255f, a / 255f);
-            return true;
-        }
-
-        private static bool ApproximatelyEqual(Color a, Color b)
-        {
-            return Mathf.Abs(a.r - b.r) < 0.01f &&
-                   Mathf.Abs(a.g - b.g) < 0.01f &&
-                   Mathf.Abs(a.b - b.b) < 0.01f;
-        }
-
-        private static void DrawColorRect(Rect rect, Color color, bool selected)
-        {
-            Color old = GUI.color;
-
-            GUI.color = Color.black;
-            GUI.DrawTexture(rect, Texture2D.whiteTexture);
-
-            var inner = new Rect(rect.x + 1f, rect.y + 1f, rect.width - 2f, rect.height - 2f);
-            GUI.color = color;
-            GUI.DrawTexture(inner, Texture2D.whiteTexture);
-
-            if (selected)
-            {
-                var mark = new Rect(rect.x + 5f, rect.y + 4f, rect.width - 10f, rect.height - 8f);
-                GUI.color = color.grayscale > 0.5f ? Color.black : Color.white;
-                GUI.DrawTexture(mark, Texture2D.whiteTexture);
-            }
-
-            GUI.color = old;
-        }
-
-        private static GUIStyle GetPresetButtonStyle()
-        {
-            if (_presetButtonStyle == null)
-            {
-                _presetButtonStyle = new GUIStyle(GUI.skin.button);
-                _presetButtonStyle.margin = new RectOffset(1, 1, 1, 1);
-                _presetButtonStyle.padding = new RectOffset(2, 2, 1, 1);
-                _presetButtonStyle.fontStyle = FontStyle.Bold;
-                _presetButtonStyle.alignment = TextAnchor.MiddleCenter;
-            }
-
-            return _presetButtonStyle;
-        }
-
-        private static bool TryParseHexByte(string value, out byte result)
-        {
-            try
-            {
-                result = Convert.ToByte(value, 16);
-                return true;
-            }
-            catch
-            {
-                result = 0;
-                return false;
-            }
-        }
-    }
-
     [HarmonyPatch(typeof(GuiCrosshairController), "Update")]
     internal static class GuiCrosshairControllerUpdatePatch
     {
-        private static bool _lastContent = true;
-
         [HarmonyPrefix]
         private static bool Prefix(GuiCrosshairController __instance)
         {
@@ -624,27 +389,6 @@ namespace BnlPlugins.Crosshair
         [HarmonyPostfix]
         private static void Postfix(GuiCrosshairController __instance)
         {
-            bool contentNow = __instance.Content != null && __instance.Content.activeSelf;
-            if (contentNow != _lastContent)
-            {
-                _lastContent = contentNow;
-                var hud = Singleton<Hud>.Instance;
-                var registry = Singleton<UnitsRegistry>.Instance;
-                var player = registry != null ? registry.GetPlayer() : null;
-                CrosshairPlugin.Log.LogInfo(
-                    "[Crosshair] Content changed -> " + contentNow +
-                    " | IsPlayerAlive=" + (hud != null ? hud.IsPlayerAlive.ToString() : "?") +
-                    " IsMenu=" + (hud != null ? hud.IsMenu.ToString() : "?") +
-                    " IsMapFullSize=" + (hud != null ? hud.IsMapFullSize.ToString() : "?") +
-                    " ShowScores=" + (hud != null ? hud.ShowScores.ToString() : "?") +
-                    " | player=" + (player != null ? "found" : "null") +
-                    " CurrentGear=" + (player != null && player.CurrentGear != null ? "present" : "null") +
-                    " IsReloading=" + (player != null ? player.IsReloading.ToString() : "?") +
-                    " IsSwitchingGear=" + (player != null ? player.IsSwitchingGear.ToString() : "?") +
-                    " IsInAimingState=" + (player != null ? player.IsInAimingState().ToString() : "?") +
-                    " PopCount=" + (__instance.CrosshairsPopulation != null ? __instance.CrosshairsPopulation.Content.Count.ToString() : "?"));
-            }
-
             CrosshairRuntime.RefreshShapeIfNeeded(__instance);
             CrosshairRuntime.ApplyVisibility(__instance);
         }

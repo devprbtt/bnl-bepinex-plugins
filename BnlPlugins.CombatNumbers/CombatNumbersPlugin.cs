@@ -49,16 +49,14 @@ namespace BnlPlugins.CombatNumbers
                 new ConfigDescription("Enable combat number overrides.", null,
                     new ConfigurationManagerAttributes { Order = 100 }));
             Alpha = Config.Bind("General", "Alpha", 1f,
-                new ConfigDescription("Overall opacity of all combat numbers.", new AcceptableValueRange<float>(0.05f, 1f),
-                    new ConfigurationManagerAttributes { Order = 99 }));
+                FloatConfig.Range("Overall opacity of all combat numbers.", 0.05f, 1f, 99));
 
             DamageColorHex = Config.Bind("Damage Numbers", "DamageColor", "#FFFFFF",
                 MakeColorDesc("Damage number color.", 90, "Damage Color"));
             CritColorHex = Config.Bind("Damage Numbers", "CritColor", "#FF6600",
                 MakeColorDesc("Critical hit number color.", 89, "Crit Color"));
             DamageSizeMultiplier = Config.Bind("Damage Numbers", "SizeMultiplier", 2f,
-                new ConfigDescription("Damage number size multiplier.", new AcceptableValueRange<float>(0.25f, 5f),
-                    new ConfigurationManagerAttributes { Order = 88 }));
+                FloatConfig.Range("Damage number size multiplier.", 0.25f, 5f, 88));
             CombineDamage = Config.Bind("Damage Numbers", "CombineDamage", false,
                 new ConfigDescription("Keep accumulating hits on the same number until it fades.",
                     null, new ConfigurationManagerAttributes { Order = 87 }));
@@ -69,11 +67,9 @@ namespace BnlPlugins.CombatNumbers
             HealColorHex = Config.Bind("Healing Numbers", "HealColor", "#91ED78",
                 MakeColorDesc("Heal number color.", 90, "Heal Color"));
             HealSizeMultiplier = Config.Bind("Healing Numbers", "SizeMultiplier", 2f,
-                new ConfigDescription("Heal number size multiplier.", new AcceptableValueRange<float>(0.25f, 5f),
-                    new ConfigurationManagerAttributes { Order = 89 }));
+                FloatConfig.Range("Heal number size multiplier.", 0.25f, 5f, 89));
             MinimumHeal = Config.Bind("Healing Numbers", "MinimumHeal", 0.5f,
-                new ConfigDescription("Minimum heal amount to show a number.", new AcceptableValueRange<float>(0f, 100f),
-                    new ConfigurationManagerAttributes { Order = 88 }));
+                FloatConfig.Range("Minimum heal amount to show a number.", 0f, 100f, 88));
             ShowFriendlyHealing = Config.Bind("Healing Numbers", "ShowFriendlyHealing", false,
                 new ConfigDescription("Show heal numbers on friendly units.",
                     null, new ConfigurationManagerAttributes { Order = 87 }));
@@ -85,14 +81,19 @@ namespace BnlPlugins.CombatNumbers
                     null, new ConfigurationManagerAttributes { Order = 85 }));
 
             SelfHealSizeMultiplier = Config.Bind("Self Heal", "SizeMultiplier", 0.7f,
-                new ConfigDescription("Size multiplier for self-heal numbers.", new AcceptableValueRange<float>(0.1f, 5f),
-                    new ConfigurationManagerAttributes { Order = 90 }));
+                FloatConfig.Range("Size multiplier for self-heal numbers.", 0.1f, 5f, 90));
             SelfHealX = Config.Bind("Self Heal", "OffsetX", 0f,
-                new ConfigDescription("Horizontal screen offset for self-heal numbers (pixels).", new AcceptableValueRange<float>(-1000f, 1000f),
-                    new ConfigurationManagerAttributes { Order = 89 }));
+                FloatConfig.Range("Horizontal screen offset for self-heal numbers (pixels).", -1000f, 1000f, 89));
             SelfHealY = Config.Bind("Self Heal", "OffsetY", 0f,
-                new ConfigDescription("Vertical screen offset for self-heal numbers (pixels).", new AcceptableValueRange<float>(-1000f, 1000f),
-                    new ConfigurationManagerAttributes { Order = 88 }));
+                FloatConfig.Range("Vertical screen offset for self-heal numbers (pixels).", -1000f, 1000f, 88));
+
+            FloatConfig.BindRound(Alpha, 0.05f, 1f);
+            FloatConfig.BindRound(DamageSizeMultiplier, 0.25f, 5f);
+            FloatConfig.BindRound(HealSizeMultiplier, 0.25f, 5f);
+            FloatConfig.BindRound(MinimumHeal, 0f, 100f);
+            FloatConfig.BindRound(SelfHealSizeMultiplier, 0.1f, 5f);
+            FloatConfig.BindRound(SelfHealX, -1000f, 1000f);
+            FloatConfig.BindRound(SelfHealY, -1000f, 1000f);
 
             _harmony = new Harmony(HarmonyId);
             _harmony.PatchAll(typeof(CombatNumbersPlugin).Assembly);

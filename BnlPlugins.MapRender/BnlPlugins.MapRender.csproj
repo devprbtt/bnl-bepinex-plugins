@@ -2,8 +2,8 @@
 
   <PropertyGroup>
     <TargetFramework>net35</TargetFramework>
-    <AssemblyName>BnlPlugins.Fov</AssemblyName>
-    <RootNamespace>BnlPlugins.Fov</RootNamespace>
+    <AssemblyName>BnlPlugins.MapRender</AssemblyName>
+    <RootNamespace>BnlPlugins.MapRender</RootNamespace>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>None</ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>

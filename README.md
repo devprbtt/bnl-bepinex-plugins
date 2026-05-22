@@ -10,9 +10,22 @@ In addition to the core launcher, the installer offers optional quality-of-life 
 
 | Plugin | Description |
 |--------|-------------|
-| **Combat Numbers** | Customize damage and healing numbers, including colors, size, combine behavior, and self-heal offsets. Configure in-game via the Configuration Manager (press **`**). |
-| **Crosshair** | Custom crosshair color, size, spread, shape, and ADS visibility. Configure in-game via the Configuration Manager (press **`**). |
+| **Aim Healthbar** | Show a healthbar for the unit your crosshair is aimed at. |
+| **Auto Crouch** | Disable the forced-crouch behaviour when the ceiling is too low to stand. |
+| **Auto Queue** | Auto-join casual queue from custom games; leaves when a match is found. |
+| **Build Preview** | Optimistic local block placement with rollback on server rejection (recommended for high ping). |
+| **Combat Numbers** | Damage, crit, healing, combine, and self-heal number controls. |
+| **Crosshair** | Custom crosshair color, size, spread, shape, and ADS visibility. |
+| **Death Cam HP** | Show spectated target HP in the death-cam nickname row; keep friendly healthbars visible while dead. |
 | **FOV / ADS** | Override camera FOV, ADS sensitivity multiplier, and weapon model FOV. |
+| **Impact VFX** | Hide impact/explosion VFX, lava/water plane visuals, and falling block visuals. |
+| **Low HP Alert** | Highlight low-health friendlies with a configurable color and optional off-screen direction indicator. |
+| **Map Render** | Override the map's environmental lighting preset (Default, Daytime, Sunset, Night). |
+| **Misc** | Skip intro, disable main-menu frame cap, hide objective beam. |
+| **Shield Timer** | Enemy shield buff bar with a circle or numeric duration timer. |
+| **Team Colors** | Override friendly, enemy, and background team colors with presets or custom hex values. |
+| **Teammate HP** | Show each teammate's HP percentage next to their name in the team panel. |
+| **Unit GUI / WSI Scale** | Scale unit GUI elements and world-space indicators independently. |
 
 These are opt-in — uncheck them in the installer if you don't want them.
 
@@ -24,7 +37,7 @@ These are opt-in — uncheck them in the installer if you don't want them.
 2. **Double-click** to run — no dependencies, works on any Windows 10/11 PC
 3. The installer auto-detects your Block N Load folder, lets you pick components, and installs everything
 4. Optional: enable the Steam launch-options checkbox if you want the installer to write the direct `BlockNLoad.exe` launch option for your Steam user
-5. If a release includes extra optional plugins, the installer will show them before extraction so you can skip anything you do not want
+5. If a release includes extra optional plugins, the installer shows only the ones you do not already have installed
 
 ### Option 2: Manual Install
 
@@ -71,32 +84,18 @@ host=v310.blocknload.pauldh.nl
 port=28100
 ```
 
-You can also change these settings in-game: press **`** to open the Configuration Manager.
+You can also change these settings in-game: press **Home** to toggle the Configuration Manager.
 
 ## Configuration Manager
 
-Press **`** in-game to open a settings menu where you can change plugin settings without editing config files:
+Press **Home** in-game to toggle a settings menu where you can change plugin settings without editing config files:
 
 - Server host and port
-- Crosshair color, size, spread, shape, and ADS visibility (if Crosshair plugin installed)
-- FOV and ADS sensitivity (if FOV plugin installed)
+- Settings for every optional plugin that is installed (Crosshair, FOV, Combat Numbers, Team Colors, Shield Timer, and more)
 
 This is powered by [BepInEx.ConfigurationManager](https://github.com/BepInEx/BepInEx.ConfigurationManager) — included automatically.
 
-The default hotkey is **`**.
-
-## Crosshair Plugin
-
-When installed, the Crosshair plugin lets you customize the in-game crosshair via the Configuration Manager:
-
-- **Color** — separate colors for idle, full-damage range, and below-max range targets. Supports hex input (`#RRGGBBAA`) and preset color buttons.
-- **Brightness** — multiplier applied on top of the color.
-- **Alpha** — overall crosshair transparency.
-- **Size** — scale multiplier for the crosshair widget.
-- **Spread** — multiplier for the bloom/spread angle.
-- **Force Shape** — override the weapon's crosshair type (`Dot`, `Crosshair`, `BrokenCircle`, `Hashed`, `HashedCrosshair`, `Melee`, or `__DEFAULT__` to leave it as-is).
-- **Force Show in ADS** — keep the crosshair visible while aiming down sights.
-- **Hide Crosshair** — hide it entirely.
+The default hotkey is **Home**.
 
 ## Combat Numbers Plugin
 
@@ -120,7 +119,89 @@ When installed, the Combat Numbers plugin lets you customize how damage and heal
   - **Size Multiplier** — scale self-heal numbers separately.
   - **Offset X / Offset Y** — move self-heal numbers on screen.
 
-Configure in-game via the Configuration Manager (press **`**), or edit `BepInEx\\config\\bnl.community.combatnumbers.cfg`.
+Configure in-game via the Configuration Manager (press **Home**), or edit `BepInEx\config\bnl.community.combatnumbers.cfg`.
+
+## Crosshair Plugin
+
+Customise the in-game crosshair via the Configuration Manager:
+
+- **Color** — idle, full-damage range, and below-max range colors. Hex input (`#RRGGBBAA`) with preset buttons.
+- **Brightness / Alpha** — multiplier and overall opacity.
+- **Size / Spread** — scale and bloom multipliers.
+- **Force Shape** — override the weapon's crosshair type (`Dot`, `Crosshair`, `BrokenCircle`, `Hashed`, `HashedCrosshair`, `Melee`, or `__DEFAULT__`).
+- **Force Show in ADS** — keep the crosshair visible while aiming down sights.
+- **Hide Crosshair** — hide it entirely.
+
+## Team Colors Plugin
+
+Override the four team color slots used by healthbars and HUD elements:
+
+- **Presets** — Default, Classic, Beta, or Custom.
+- **Friendly / Enemy / Background Friendly / Background Enemy** — individual hex color pickers.
+
+## Shield Timer Plugin
+
+Adds a visual timer to enemy shield buffs:
+
+- **Shield Bar Color** — color of the shield duration bar.
+- **Clock Style** — circle countdown or numeric text.
+- **Size Multiplier** — scale the timer widget.
+
+## Aim Healthbar Plugin
+
+Shows a healthbar above the unit your crosshair is currently aimed at. Toggle on/off in the Configuration Manager.
+
+## Death Cam HP Plugin
+
+While spectating after death, appends the target's current HP percentage to their nickname and keeps friendly healthbars visible on screen.
+
+## Auto Queue Plugin
+
+When enabled and you are in a custom game lobby, automatically enters casual matchmaking queue. Leaves the custom game as soon as a casual match is found.
+
+## Build Preview Plugin
+
+Applies block and device placements locally before the server confirms them. If the server rejects a placement it is rolled back. Most useful on high-latency connections.
+
+## Low HP Alert Plugin
+
+Highlights low-health friendly units:
+
+- **Threshold** — HP percentage below which the alert activates.
+- **Alert Color** — color applied to the healthbar.
+- **Direction Indicator** — optional off-screen arrow pointing toward the unit.
+
+## Teammate HP Plugin
+
+Appends each teammate's current HP percentage to their name in the in-game team panel while they are alive.
+
+## Impact VFX Plugin
+
+Individually toggle:
+
+- **Hide Impact VFX** — remove bullet/explosion hit particles.
+- **Hide Lava / Water Plane** — remove lava and water surface visuals.
+- **Hide Falling Blocks** — remove falling block physics objects.
+
+## Unit GUI / WSI Scale Plugin
+
+- **Unit GUI Scale** — multiplier for in-world unit UI (healthbars, names).
+- **WSI Scale** — multiplier for world-space indicators.
+Both have independent enable toggles.
+
+## Map Render Plugin
+
+Select a global lighting preset for the map environment: **Default**, **Daytime Warm**, **Daytime Cold**, **Sunset**, or **Night**.
+
+## Misc Plugin
+
+- **Skip Intro** — bypass the intro video on launch.
+- **Disable Main-Menu Frame Cap** — remove the FPS cap on the main menu.
+- **Hide Objective Beam** — hide the tall colored beam marking objectives.
+
+## Auto Crouch Plugin
+
+Disables the automatic crouch that the game forces when the player's head is too close to a ceiling.
 
 ## Auto-Updates
 

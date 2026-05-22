@@ -22,7 +22,7 @@ namespace BnlPlugins.Launcher
     ///   - EACToolInitializer.Initialize()/KickPlayer()/leave hooks → disabled
     ///   - Writes servers.txt for community server selection
     /// </summary>
-    [BepInPlugin("bnl.community.launcher", "BNL Launcher Patches", "1.3.0")]
+    [BepInPlugin("bnl.community.launcher", "! BNL Launcher Patches", "1.3.0")]
     public class LauncherPlugin : BaseUnityPlugin
     {
         internal const string CurrentVersion = "1.3.0";

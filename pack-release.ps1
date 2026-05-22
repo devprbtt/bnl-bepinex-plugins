@@ -2,13 +2,21 @@
 # The zip mirrors the game folder structure — user just extracts to
 # their BlockNLoad folder and launches through Steam.
 param(
-    [string]$Version = "1.3.5",
+    [string]$Version = "1.4.0",
     [string]$OutputDir = ".\release",
     [string]$GameRoot = ""
 )
 
 $ErrorActionPreference = "Stop"
 $workspace = $PSScriptRoot
+
+function Get-DllVersion($path) {
+    if (!(Test-Path $path)) { return $null }
+    $info = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($path)
+    if ($info.ProductVersion) { return ($info.ProductVersion -split '[ +]')[0] }
+    if ($info.FileVersion) { return ($info.FileVersion -split '[ +]')[0] }
+    return $null
+}
 
 # Auto-detect game root from Directory.Build.props if not specified
 if ([string]::IsNullOrEmpty($GameRoot)) {
@@ -56,6 +64,116 @@ if (Test-Path $combatNumbersProject) {
     if ($LASTEXITCODE -ne 0) { throw "CombatNumbers plugin build failed" }
 }
 
+$shieldTimerProject = "$workspace\BnlPlugins.ShieldTimer\BnlPlugins.ShieldTimer.csproj"
+$shieldTimerDll = "$workspace\BnlPlugins.ShieldTimer\bin\Release\net35\BnlPlugins.ShieldTimer.dll"
+if (Test-Path $shieldTimerProject) {
+    dotnet build $shieldTimerProject -c Release
+    if ($LASTEXITCODE -ne 0) { throw "ShieldTimer plugin build failed" }
+}
+
+$buildPreviewProject = "$workspace\BnlPlugins.BuildPreview\BnlPlugins.BuildPreview.csproj"
+$buildPreviewDll = "$workspace\BnlPlugins.BuildPreview\bin\Release\net35\BnlPlugins.BuildPreview.dll"
+if (Test-Path $buildPreviewProject) {
+    dotnet build $buildPreviewProject -c Release
+    if ($LASTEXITCODE -ne 0) { throw "BuildPreview plugin build failed" }
+}
+
+$aimHealthbarProject = "$workspace\BnlPlugins.AimHealthbar\BnlPlugins.AimHealthbar.csproj"
+$aimHealthbarDll = "$workspace\BnlPlugins.AimHealthbar\bin\Release\net35\BnlPlugins.AimHealthbar.dll"
+if (Test-Path $aimHealthbarProject) {
+    dotnet build $aimHealthbarProject -c Release
+    if ($LASTEXITCODE -ne 0) { throw "AimHealthbar plugin build failed" }
+}
+
+$deathCamHpProject = "$workspace\BnlPlugins.DeathCamHp\BnlPlugins.DeathCamHp.csproj"
+$deathCamHpDll = "$workspace\BnlPlugins.DeathCamHp\bin\Release\net35\BnlPlugins.DeathCamHp.dll"
+if (Test-Path $deathCamHpProject) {
+    dotnet build $deathCamHpProject -c Release
+    if ($LASTEXITCODE -ne 0) { throw "DeathCamHp plugin build failed" }
+}
+
+$autoQueueProject = "$workspace\BnlPlugins.AutoQueue\BnlPlugins.AutoQueue.csproj"
+$autoQueueDll = "$workspace\BnlPlugins.AutoQueue\bin\Release\net35\BnlPlugins.AutoQueue.dll"
+if (Test-Path $autoQueueProject) {
+    dotnet build $autoQueueProject -c Release
+    if ($LASTEXITCODE -ne 0) { throw "AutoQueue plugin build failed" }
+}
+
+$lowHpAlertProject = "$workspace\BnlPlugins.LowHpAlert\BnlPlugins.LowHpAlert.csproj"
+$lowHpAlertDll = "$workspace\BnlPlugins.LowHpAlert\bin\Release\net35\BnlPlugins.LowHpAlert.dll"
+if (Test-Path $lowHpAlertProject) {
+    dotnet build $lowHpAlertProject -c Release
+    if ($LASTEXITCODE -ne 0) { throw "LowHpAlert plugin build failed" }
+}
+
+$autoCrouchProject = "$workspace\BnlPlugins.AutoCrouch\BnlPlugins.AutoCrouch.csproj"
+$autoCrouchDll = "$workspace\BnlPlugins.AutoCrouch\bin\Release\net35\BnlPlugins.AutoCrouch.dll"
+if (Test-Path $autoCrouchProject) {
+    dotnet build $autoCrouchProject -c Release
+    if ($LASTEXITCODE -ne 0) { throw "AutoCrouch plugin build failed" }
+}
+
+$teammateHpProject = "$workspace\BnlPlugins.TeammateHp\BnlPlugins.TeammateHp.csproj"
+$teammateHpDll = "$workspace\BnlPlugins.TeammateHp\bin\Release\net35\BnlPlugins.TeammateHp.dll"
+if (Test-Path $teammateHpProject) {
+    dotnet build $teammateHpProject -c Release
+    if ($LASTEXITCODE -ne 0) { throw "TeammateHp plugin build failed" }
+}
+
+$impactVfxProject = "$workspace\BnlPlugins.ImpactVfx\BnlPlugins.ImpactVfx.csproj"
+$impactVfxDll = "$workspace\BnlPlugins.ImpactVfx\bin\Release\net35\BnlPlugins.ImpactVfx.dll"
+if (Test-Path $impactVfxProject) {
+    dotnet build $impactVfxProject -c Release
+    if ($LASTEXITCODE -ne 0) { throw "ImpactVfx plugin build failed" }
+}
+
+$unitGuiWsiScaleProject = "$workspace\BnlPlugins.UnitGuiWsiScale\BnlPlugins.UnitGuiWsiScale.csproj"
+$unitGuiWsiScaleDll = "$workspace\BnlPlugins.UnitGuiWsiScale\bin\Release\net35\BnlPlugins.UnitGuiWsiScale.dll"
+if (Test-Path $unitGuiWsiScaleProject) {
+    dotnet build $unitGuiWsiScaleProject -c Release
+    if ($LASTEXITCODE -ne 0) { throw "UnitGuiWsiScale plugin build failed" }
+}
+
+$mapRenderProject = "$workspace\BnlPlugins.MapRender\BnlPlugins.MapRender.csproj"
+$mapRenderDll = "$workspace\BnlPlugins.MapRender\bin\Release\net35\BnlPlugins.MapRender.dll"
+if (Test-Path $mapRenderProject) {
+    dotnet build $mapRenderProject -c Release
+    if ($LASTEXITCODE -ne 0) { throw "MapRender plugin build failed" }
+}
+
+$miscProject = "$workspace\BnlPlugins.Misc\BnlPlugins.Misc.csproj"
+$miscDll = "$workspace\BnlPlugins.Misc\bin\Release\net35\BnlPlugins.Misc.dll"
+if (Test-Path $miscProject) {
+    dotnet build $miscProject -c Release
+    if ($LASTEXITCODE -ne 0) { throw "Misc plugin build failed" }
+}
+
+$teamColorsProject = "$workspace\BnlPlugins.TeamColors\BnlPlugins.TeamColors.csproj"
+$teamColorsDll = "$workspace\BnlPlugins.TeamColors\bin\Release\net35\BnlPlugins.TeamColors.dll"
+if (Test-Path $teamColorsProject) {
+    dotnet build $teamColorsProject -c Release
+    if ($LASTEXITCODE -ne 0) { throw "TeamColors plugin build failed" }
+}
+
+$launcherDll = "$workspace\BnlPlugins.Launcher\bin\Release\net35\BnlPlugins.Launcher.dll"
+$launcherVersion = Get-DllVersion $launcherDll
+$fovVersion = Get-DllVersion $fovDll
+$crosshairVersion = Get-DllVersion $crosshairDll
+$combatNumbersVersion = Get-DllVersion $combatNumbersDll
+$shieldTimerVersion = Get-DllVersion $shieldTimerDll
+$buildPreviewVersion = Get-DllVersion $buildPreviewDll
+$aimHealthbarVersion = Get-DllVersion $aimHealthbarDll
+$deathCamHpVersion = Get-DllVersion $deathCamHpDll
+$autoQueueVersion = Get-DllVersion $autoQueueDll
+$lowHpAlertVersion = Get-DllVersion $lowHpAlertDll
+$autoCrouchVersion = Get-DllVersion $autoCrouchDll
+$teammateHpVersion = Get-DllVersion $teammateHpDll
+$impactVfxVersion = Get-DllVersion $impactVfxDll
+$unitGuiWsiScaleVersion = Get-DllVersion $unitGuiWsiScaleDll
+$mapRenderVersion = Get-DllVersion $mapRenderDll
+$miscVersion = Get-DllVersion $miscDll
+$teamColorsVersion = Get-DllVersion $teamColorsDll
+
 # Build installer exe
 dotnet build "$workspace\BnlInstaller\BnlInstaller.csproj" -c Release
 if ($LASTEXITCODE -ne 0) { throw "Installer build failed" }
@@ -101,6 +219,45 @@ if (Test-Path $crosshairDll) {
 if (Test-Path $combatNumbersDll) {
     Copy-Item $combatNumbersDll (Join-Path $staging "Win64\BepInEx\plugins")
 }
+if (Test-Path $shieldTimerDll) {
+    Copy-Item $shieldTimerDll (Join-Path $staging "Win64\BepInEx\plugins")
+}
+if (Test-Path $buildPreviewDll) {
+    Copy-Item $buildPreviewDll (Join-Path $staging "Win64\BepInEx\plugins")
+}
+if (Test-Path $aimHealthbarDll) {
+    Copy-Item $aimHealthbarDll (Join-Path $staging "Win64\BepInEx\plugins")
+}
+if (Test-Path $deathCamHpDll) {
+    Copy-Item $deathCamHpDll (Join-Path $staging "Win64\BepInEx\plugins")
+}
+if (Test-Path $autoQueueDll) {
+    Copy-Item $autoQueueDll (Join-Path $staging "Win64\BepInEx\plugins")
+}
+if (Test-Path $lowHpAlertDll) {
+    Copy-Item $lowHpAlertDll (Join-Path $staging "Win64\BepInEx\plugins")
+}
+if (Test-Path $autoCrouchDll) {
+    Copy-Item $autoCrouchDll (Join-Path $staging "Win64\BepInEx\plugins")
+}
+if (Test-Path $teammateHpDll) {
+    Copy-Item $teammateHpDll (Join-Path $staging "Win64\BepInEx\plugins")
+}
+if (Test-Path $impactVfxDll) {
+    Copy-Item $impactVfxDll (Join-Path $staging "Win64\BepInEx\plugins")
+}
+if (Test-Path $unitGuiWsiScaleDll) {
+    Copy-Item $unitGuiWsiScaleDll (Join-Path $staging "Win64\BepInEx\plugins")
+}
+if (Test-Path $mapRenderDll) {
+    Copy-Item $mapRenderDll (Join-Path $staging "Win64\BepInEx\plugins")
+}
+if (Test-Path $miscDll) {
+    Copy-Item $miscDll (Join-Path $staging "Win64\BepInEx\plugins")
+}
+if (Test-Path $teamColorsDll) {
+    Copy-Item $teamColorsDll (Join-Path $staging "Win64\BepInEx\plugins")
+}
 
 # Copy Configuration Manager (in-game settings menu, F1)
 $cfgManDir = "$workspace\bepinex-dist\BepInEx\plugins\ConfigurationManager"
@@ -119,6 +276,7 @@ $manifestComponents = @(
     [ordered]@{
         id = "bepinex-runtime"
         name = "BepInEx Runtime"
+        version = $Version
         description = "Doorstop bootstrap and BepInEx core files."
         required = $true
         default = $true
@@ -134,6 +292,7 @@ $manifestComponents = @(
     [ordered]@{
         id = "launcher"
         name = "Community Launcher"
+        version = $(if ($launcherVersion) { $launcherVersion } else { $Version })
         description = "Server patches, installer helper, and version metadata."
         required = $true
         default = $true
@@ -147,8 +306,9 @@ $manifestComponents = @(
     [ordered]@{
         id = "card-textures"
         name = "Card Texture Overrides"
-        description = "Bundled custom card images."
-        required = $false
+        version = $Version
+        description = "Bundled custom card images required by launcher-provided perk and shop overrides."
+        required = $true
         default = $true
         paths = @(
             "BepInEx/plugins/Launcher/CardTextures/"
@@ -157,6 +317,7 @@ $manifestComponents = @(
     [ordered]@{
         id = "configuration-manager"
         name = "Configuration Manager"
+        version = "18.4.1"
         description = "In-game settings UI."
         required = $false
         default = $true
@@ -171,6 +332,7 @@ if (Test-Path $fovDll) {
     $manifestComponents += [ordered]@{
         id = "fov"
         name = "FOV / ADS"
+        version = $(if ($fovVersion) { $fovVersion } else { $Version })
         description = "Forced camera FOV, ADS sensitivity multiplier, and weapon model FOV."
         required = $false
         default = $false
@@ -184,6 +346,7 @@ if (Test-Path $crosshairDll) {
     $manifestComponents += [ordered]@{
         id = "crosshair"
         name = "Crosshair"
+        version = $(if ($crosshairVersion) { $crosshairVersion } else { $Version })
         description = "Crosshair color, size, spread, visibility, and forced-shape overrides."
         required = $false
         default = $false
@@ -197,11 +360,194 @@ if (Test-Path $combatNumbersDll) {
     $manifestComponents += [ordered]@{
         id = "combatnumbers"
         name = "Combat Numbers"
-        description = "Damage and healing number styling, combine behavior, and self-heal display controls."
+        version = $(if ($combatNumbersVersion) { $combatNumbersVersion } else { $Version })
+        description = "Damage, crit, healing, combine, and self-heal number controls that match the community launcher behavior."
         required = $false
         default = $false
         paths = @(
             "BepInEx/plugins/BnlPlugins.CombatNumbers.dll"
+        )
+    }
+}
+
+if (Test-Path $shieldTimerDll) {
+    $manifestComponents += [ordered]@{
+        id = "shieldtimer"
+        name = "Shield Timer"
+        version = $(if ($shieldTimerVersion) { $shieldTimerVersion } else { $Version })
+        description = "Enemy shield buff bar with circle or numeric shield duration timer, matching the community launcher behavior."
+        required = $false
+        default = $false
+        paths = @(
+            "BepInEx/plugins/BnlPlugins.ShieldTimer.dll"
+        )
+    }
+}
+
+if (Test-Path $buildPreviewDll) {
+    $manifestComponents += [ordered]@{
+        id = "buildpreview"
+        name = "Build Preview"
+        version = $(if ($buildPreviewVersion) { $buildPreviewVersion } else { $Version })
+        description = "Optimistic local block and device placement with rollback on server rejection. Recommended mainly for high ping."
+        required = $false
+        default = $false
+        paths = @(
+            "BepInEx/plugins/BnlPlugins.BuildPreview.dll"
+        )
+    }
+}
+
+if (Test-Path $aimHealthbarDll) {
+    $manifestComponents += [ordered]@{
+        id = "aimhealthbar"
+        name = "Aim Healthbar"
+        version = $(if ($aimHealthbarVersion) { $aimHealthbarVersion } else { $Version })
+        description = "Show a unit healthbar while your crosshair is aimed directly at that unit."
+        required = $false
+        default = $false
+        paths = @(
+            "BepInEx/plugins/BnlPlugins.AimHealthbar.dll"
+        )
+    }
+}
+
+if (Test-Path $deathCamHpDll) {
+    $manifestComponents += [ordered]@{
+        id = "deathcamhp"
+        name = "Death Cam HP"
+        version = $(if ($deathCamHpVersion) { $deathCamHpVersion } else { $Version })
+        description = "Show spectated target HP in the death-cam nickname row and keep friendly healthbars visible while dead."
+        required = $false
+        default = $false
+        paths = @(
+            "BepInEx/plugins/BnlPlugins.DeathCamHp.dll"
+        )
+    }
+}
+
+if (Test-Path $autoQueueDll) {
+    $manifestComponents += [ordered]@{
+        id = "autoqueue"
+        name = "Auto Queue"
+        version = $(if ($autoQueueVersion) { $autoQueueVersion } else { $Version })
+        description = "Automatically join casual queue from custom games and leave the custom game when a match is found."
+        required = $false
+        default = $false
+        paths = @(
+            "BepInEx/plugins/BnlPlugins.AutoQueue.dll"
+        )
+    }
+}
+
+if (Test-Path $lowHpAlertDll) {
+    $manifestComponents += [ordered]@{
+        id = "lowhpalert"
+        name = "Low HP Alert"
+        version = $(if ($lowHpAlertVersion) { $lowHpAlertVersion } else { $Version })
+        description = "Highlight low-health friendlies with an alert color and optional off-screen direction indicator."
+        required = $false
+        default = $false
+        paths = @(
+            "BepInEx/plugins/BnlPlugins.LowHpAlert.dll"
+        )
+    }
+}
+
+if (Test-Path $autoCrouchDll) {
+    $manifestComponents += [ordered]@{
+        id = "autocrouch"
+        name = "Auto Crouch"
+        version = $(if ($autoCrouchVersion) { $autoCrouchVersion } else { $Version })
+        description = "Disable the forced-crouch behaviour that triggers when the ceiling is too low to stand."
+        required = $false
+        default = $false
+        paths = @(
+            "BepInEx/plugins/BnlPlugins.AutoCrouch.dll"
+        )
+    }
+}
+
+if (Test-Path $teammateHpDll) {
+    $manifestComponents += [ordered]@{
+        id = "teammatehp"
+        name = "Teammate HP"
+        version = $(if ($teammateHpVersion) { $teammateHpVersion } else { $Version })
+        description = "Show each teammate's HP percentage next to their name in the team panel."
+        required = $false
+        default = $false
+        paths = @(
+            "BepInEx/plugins/BnlPlugins.TeammateHp.dll"
+        )
+    }
+}
+
+if (Test-Path $impactVfxDll) {
+    $manifestComponents += [ordered]@{
+        id = "impactvfx"
+        name = "Impact VFX"
+        version = $(if ($impactVfxVersion) { $impactVfxVersion } else { $Version })
+        description = "Hide impact and explosion VFX, lava/water plane visuals, and falling block visuals."
+        required = $false
+        default = $false
+        paths = @(
+            "BepInEx/plugins/BnlPlugins.ImpactVfx.dll"
+        )
+    }
+}
+
+if (Test-Path $unitGuiWsiScaleDll) {
+    $manifestComponents += [ordered]@{
+        id = "unitguiwsiscale"
+        name = "Unit GUI / WSI Scale"
+        version = $(if ($unitGuiWsiScaleVersion) { $unitGuiWsiScaleVersion } else { $Version })
+        description = "Scale unit GUI elements and world-space indicators with separate toggles and multipliers."
+        required = $false
+        default = $false
+        paths = @(
+            "BepInEx/plugins/BnlPlugins.UnitGuiWsiScale.dll"
+        )
+    }
+}
+
+if (Test-Path $mapRenderDll) {
+    $manifestComponents += [ordered]@{
+        id = "maprender"
+        name = "Map Render"
+        version = $(if ($mapRenderVersion) { $mapRenderVersion } else { $Version })
+        description = "Override the map's environmental lighting preset."
+        required = $false
+        default = $false
+        paths = @(
+            "BepInEx/plugins/BnlPlugins.MapRender.dll"
+        )
+    }
+}
+
+if (Test-Path $teamColorsDll) {
+    $manifestComponents += [ordered]@{
+        id = "teamcolors"
+        name = "Team Colors"
+        version = $(if ($teamColorsVersion) { $teamColorsVersion } else { $Version })
+        description = "Override friendly, enemy, and background team colors with presets or custom hex values."
+        required = $false
+        default = $false
+        paths = @(
+            "BepInEx/plugins/BnlPlugins.TeamColors.dll"
+        )
+    }
+}
+
+if (Test-Path $miscDll) {
+    $manifestComponents += [ordered]@{
+        id = "misc"
+        name = "Misc"
+        version = $(if ($miscVersion) { $miscVersion } else { $Version })
+        description = "Skip intro, disable main-menu frame cap, and hide the objective beam."
+        required = $false
+        default = $false
+        paths = @(
+            "BepInEx/plugins/BnlPlugins.Misc.dll"
         )
     }
 }
