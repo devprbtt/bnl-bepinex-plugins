@@ -22,10 +22,10 @@ namespace BnlPlugins.Launcher
     ///   - EACToolInitializer.Initialize()/KickPlayer()/leave hooks → disabled
     ///   - Writes servers.txt for community server selection
     /// </summary>
-    [BepInPlugin("bnl.community.launcher", "! BNL Launcher Patches", "1.4.2")]
+    [BepInPlugin("bnl.community.launcher", "! BNL Launcher Patches", "1.4.3")]
     public class LauncherPlugin : BaseUnityPlugin
     {
-        internal const string CurrentVersion = "1.4.2";
+        internal const string CurrentVersion = "1.4.3";
         private const string GitHubRepo = "devprbtt/bnl-bepinex-plugins";
         private const string LatestVersionUrl = "https://raw.githubusercontent.com/devprbtt/bnl-bepinex-plugins/master/latest-version.txt";
 
@@ -188,10 +188,13 @@ namespace BnlPlugins.Launcher
         private void InitializeImageOverridePaths()
         {
             PluginDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? Paths.PluginPath;
-            CardTexturesDir = Path.Combine(Path.Combine(PluginDir, "Launcher"), "CardTextures");
+            // DLL is now in plugins/BnlPlugins.Launcher/ — Launcher data lives in plugins/Launcher/
+            string pluginsRoot = Path.GetDirectoryName(PluginDir) ?? PluginDir;
+            string launcherDataDir = Path.Combine(pluginsRoot, "Launcher");
+            CardTexturesDir = Path.Combine(launcherDataDir, "CardTextures");
             Directory.CreateDirectory(CardTexturesDir);
-            _versionFilePath = Path.Combine(Path.Combine(PluginDir, "Launcher"), "version.txt");
-            _lastCheckFilePath = Path.Combine(Path.Combine(PluginDir, "Launcher"), "last_check.txt");
+            _versionFilePath = Path.Combine(launcherDataDir, "version.txt");
+            _lastCheckFilePath = Path.Combine(launcherDataDir, "last_check.txt");
         }
 
         private void ApplyHarmonyPatches()
@@ -591,7 +594,8 @@ namespace BnlPlugins.Launcher
             }
             catch { }
 
-            string installerPath = Path.Combine(Path.Combine(PluginDir, "Launcher"), "BNL-Installer.exe");
+            string pluginsRoot = Path.GetDirectoryName(PluginDir) ?? PluginDir;
+            string installerPath = Path.Combine(Path.Combine(pluginsRoot, "Launcher"), "BNL-Installer.exe");
 
             // Always refresh the local installer from the latest release so the
             // spawned exe has the full up-to-date plugin list in its manifest.
