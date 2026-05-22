@@ -640,11 +640,18 @@ namespace BnlPlugins.Launcher
             {
                 Logger.Log(BepInEx.Logging.LogLevel.Info,
                     "[BNL Launcher] Launching installer update check: " + installerPath);
+                // Run hidden for silent checks; show normally when an update is found
+                // (force=true means the user explicitly requested the check).
+                bool silent = !force;
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                 {
                     FileName = installerPath,
                     Arguments = args,
-                    UseShellExecute = true,
+                    UseShellExecute = !silent,
+                    CreateNoWindow = silent,
+                    WindowStyle = silent
+                        ? System.Diagnostics.ProcessWindowStyle.Hidden
+                        : System.Diagnostics.ProcessWindowStyle.Normal,
                     WorkingDirectory = Path.GetDirectoryName(installerPath) ?? PluginDir
                 });
             }
