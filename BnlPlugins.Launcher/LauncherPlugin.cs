@@ -22,10 +22,10 @@ namespace BnlPlugins.Launcher
     ///   - EACToolInitializer.Initialize()/KickPlayer()/leave hooks → disabled
     ///   - Writes servers.txt for community server selection
     /// </summary>
-    [BepInPlugin("bnl.community.launcher", "! BNL Launcher Patches", "1.4.3")]
+    [BepInPlugin("bnl.community.launcher", "! BNL Launcher Patches", "1.4.4")]
     public class LauncherPlugin : BaseUnityPlugin
     {
-        internal const string CurrentVersion = "1.4.3";
+        internal const string CurrentVersion = "1.4.4";
         private const string GitHubRepo = "devprbtt/bnl-bepinex-plugins";
         private const string LatestVersionUrl = "https://raw.githubusercontent.com/devprbtt/bnl-bepinex-plugins/master/latest-version.txt";
 

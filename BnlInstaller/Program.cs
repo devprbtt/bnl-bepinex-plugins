@@ -700,17 +700,12 @@ namespace BnlInstaller
                 _progressBar.Visible = false;
                 _lblStatus.Text = "";
 
-                var result = MessageBox.Show(
+                MessageBox.Show(
                     "BNL Community Launcher has been installed!\n\n" +
-                    "Launch Block N Load through Steam to play on the community server." +
-                    launchOptionStatus +
-                    (scheduledInstallerSelfUpdate ? "\n\nThe local installer will replace itself after this window closes." : "") +
-                    "\n\n" +
-                    "Open the CardTextures folder now?",
-                    "Installation Complete", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
-
-                if (result == DialogResult.Yes)
-                    System.Diagnostics.Process.Start("explorer.exe", cardDir);
+                    "Launch Block N Load through Steam to play on the community server.\n\n" +
+                    "Press Home in-game to open the settings menu." +
+                    (scheduledInstallerSelfUpdate ? "\n\nThe local installer will replace itself after this window closes." : ""),
+                    "Installation Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
                 Close();
             }
