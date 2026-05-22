@@ -18,6 +18,25 @@ namespace BnlInstaller
 {
     static class Program
     {
+        private static bool IsNewerVersion(string latest, string current)
+        {
+            try
+            {
+                string[] l = latest.Split('.');
+                string[] c = current.Split('.');
+                int len = Math.Max(l.Length, c.Length);
+                for (int i = 0; i < len; i++)
+                {
+                    int lv = i < l.Length ? int.Parse(l[i]) : 0;
+                    int cv = i < c.Length ? int.Parse(c[i]) : 0;
+                    if (lv > cv) return true;
+                    if (lv < cv) return false;
+                }
+                return false;
+            }
+            catch { return string.Compare(latest, current, StringComparison.OrdinalIgnoreCase) > 0; }
+        }
+
         [STAThread]
         static void Main(string[] args)
         {
@@ -47,6 +66,41 @@ namespace BnlInstaller
                 else if (!arg.StartsWith("--", StringComparison.Ordinal) && string.IsNullOrEmpty(gamePath))
                 {
                     gamePath = arg;
+                }
+            }
+
+            // For silent update checks, do the version comparison before creating
+            // any window so there is no visible flash when no update is available.
+            if (checkUpdates && silentNoUpdate)
+            {
+                try
+                {
+                    string installed = currentVersion ?? "0.0.0";
+                    if (string.IsNullOrWhiteSpace(installed)) installed = "0.0.0";
+
+                    // Also read from version.txt if no version was passed
+                    if (string.Equals(installed, "0.0.0") && !string.IsNullOrEmpty(gamePath))
+                    {
+                        string vp = Path.Combine(gamePath, "Win64", "BepInEx", "plugins", "Launcher", "version.txt");
+                        if (File.Exists(vp)) installed = File.ReadAllText(vp).Trim();
+                    }
+
+                    using (var client = new WebClient())
+                    {
+                        client.Headers.Add("User-Agent", "BNL-Installer");
+                        string latest = client.DownloadString(
+                            "https://raw.githubusercontent.com/devprbtt/bnl-bepinex-plugins/master/latest-version.txt").Trim();
+                        if (latest.StartsWith("v", StringComparison.OrdinalIgnoreCase))
+                            latest = latest.Substring(1);
+                        if (installed.StartsWith("v", StringComparison.OrdinalIgnoreCase))
+                            installed = installed.Substring(1);
+                        if (!IsNewerVersion(latest, installed))
+                            return; // up to date — exit with no window at all
+                    }
+                }
+                catch
+                {
+                    return; // network error — fail silently, don't nag the user
                 }
             }
 
